@@ -4,8 +4,9 @@ import { signInWithGoogle, registerWithEmail, loginWithEmail, logout, auth, db }
 import type { WorkspaceRoom } from '../utils/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
+import { createRoomConfig } from '../utils/firebase';
 import type { User } from 'firebase/auth';
-import { PenTool, LogIn, LogOut, Plus, ArrowRight, Mail, Trash2, FileText, Clock, LayoutGrid, Sun, Moon } from 'lucide-react';
+import { PenTool, LogIn, LogOut, Plus, ArrowRight, Mail, Trash2, FileText, Clock, LayoutGrid, Sun, Moon, Code, Terminal } from 'lucide-react';
 import { ThemeContext } from '../App';
 
 export const Dashboard: React.FC = () => {
@@ -25,6 +26,8 @@ export const Dashboard: React.FC = () => {
     const [myRooms, setMyRooms] = useState<WorkspaceRoom[]>([]);
     const [joinId, setJoinId] = useState('');
     const [customRoomName, setCustomRoomName] = useState('');
+    const [codeRoomName, setCodeRoomName] = useState('');
+    const [codeLanguage, setCodeLanguage] = useState('javascript');
     const [now, setNow] = useState(Date.now());
 
     useEffect(() => {
@@ -46,18 +49,29 @@ export const Dashboard: React.FC = () => {
                 roomId: d.data().roomId,
                 createdAt: d.data().createdAt,
                 members: d.data().members || [],
-                activeParticipants: d.data().activeParticipants || []
+                activeParticipants: d.data().activeParticipants || [],
+                type: d.data().type,
+                language: d.data().language
             }));
             setMyRooms(rooms.sort((a, b) => b.createdAt - a.createdAt));
         }, (err) => console.error('Presence Query Error:', err));
         return () => unsubscribe();
     }, [user]);
 
-    const handleCreate = (e: React.FormEvent) => {
+    const handleCreateText = async (e: React.FormEvent) => {
         e.preventDefault();
         const trimmed = customRoomName.trim();
-        const targetId = trimmed || Math.random().toString(36).substring(2, 12);
-        navigate(`/room/${targetId}`);
+        if (!trimmed) return;
+        await createRoomConfig(trimmed, 'text');
+        navigate(`/room/${trimmed}`);
+    };
+
+    const handleCreateCode = async (e: React.FormEvent) => {
+        e.preventDefault();
+        const trimmed = codeRoomName.trim();
+        if (!trimmed) return;
+        await createRoomConfig(trimmed, 'code', codeLanguage);
+        navigate(`/room/${trimmed}`);
     };
 
     const handleRoomNameInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -172,22 +186,7 @@ export const Dashboard: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="ws-rail-section" style={{ marginTop: '24px' }}>
-                        <div className="ws-rail-label" style={{ marginBottom: '8px' }}>Start Collaborating</div>
-                        <form onSubmit={handleCreate}>
-                            <input
-                                className="ws-input"
-                                type="text"
-                                placeholder="Project proposal"
-                                value={customRoomName}
-                                onChange={handleRoomNameInput}
-                            />
-                            <p className="ws-input-hint" style={{ marginTop: '6px', marginBottom: '10px' }}>Letters/numbers only.</p>
-                            <button type="submit" className="ws-btn-create">
-                                <Plus size={15} /> New document
-                            </button>
-                        </form>
-                    </div>
+
 
                     <div className="ws-rail-section" style={{ marginTop: '24px' }}>
                         <form onSubmit={handleJoin} style={{ display: 'flex', gap: '8px' }}>
@@ -234,8 +233,74 @@ export const Dashboard: React.FC = () => {
                         <span>Workspace</span> <span style={{ padding: '0 4px', color: '#cbd5e1' }}>/</span> <span className="ws-main-top-active">Dashboard</span>
                     </div>
 
+                    <div className="ws-main-header" style={{ marginBottom: '24px' }}>
+                        <h1 className="ws-main-title">Start a new project</h1>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '40px' }}>
+                        {/* Text Editor Creation Card */}
+                        <div style={{ background: 'var(--surface-base)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                                <div style={{ background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', padding: '8px', borderRadius: '8px' }}>
+                                    <FileText size={20} />
+                                </div>
+                                <h2 style={{ fontSize: '1.1rem', margin: 0, color: 'var(--text-main)', fontWeight: 600 }}>Text Document</h2>
+                            </div>
+                            <form onSubmit={handleCreateText} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <input
+                                    className="ws-input"
+                                    type="text"
+                                    placeholder="Enter document ID (required)"
+                                    value={customRoomName}
+                                    onChange={handleRoomNameInput}
+                                    required
+                                />
+                                <button type="submit" className="ws-btn-create" style={{ display: 'flex', justifyContent: 'center', opacity: customRoomName.trim() ? 1 : 0.6, cursor: customRoomName.trim() ? 'pointer' : 'not-allowed' }} disabled={!customRoomName.trim()}>
+                                    <Plus size={16} /> Create Document
+                                </button>
+                            </form>
+                        </div>
+
+                        {/* Code Editor Creation Card */}
+                        <div style={{ background: 'var(--surface-base)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                                <div style={{ background: 'rgba(168, 85, 247, 0.1)', color: '#a855f7', padding: '8px', borderRadius: '8px' }}>
+                                    <Code size={20} />
+                                </div>
+                                <h2 style={{ fontSize: '1.1rem', margin: 0, color: 'var(--text-main)', fontWeight: 600 }}>Code Project</h2>
+                            </div>
+                            <form onSubmit={handleCreateCode} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <input
+                                        className="ws-input"
+                                        style={{ flex: 1, marginBottom: 0 }}
+                                        type="text"
+                                        placeholder="Enter project ID (required)"
+                                        value={codeRoomName}
+                                        onChange={e => setCodeRoomName(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+                                        required
+                                    />
+                                    <select 
+                                      className="ws-input" 
+                                      style={{ width: '110px', marginBottom: 0 }}
+                                      value={codeLanguage}
+                                      onChange={e => setCodeLanguage(e.target.value)}
+                                    >
+                                        <option value="javascript">JavaScript</option>
+                                        <option value="python">Python</option>
+                                        <option value="java">Java</option>
+                                        <option value="c++">C++</option>
+                                    </select>
+                                </div>
+                                <button type="submit" className="ws-btn-create" style={{ display: 'flex', justifyContent: 'center', background: '#a855f7', color: '#fff', opacity: codeRoomName.trim() ? 1 : 0.6, cursor: codeRoomName.trim() ? 'pointer' : 'not-allowed' }} disabled={!codeRoomName.trim()}>
+                                    <Terminal size={16} /> Create Code Project
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
                     <div className="ws-main-header">
-                        <h1 className="ws-main-title">Your documents</h1>
+                        <h1 className="ws-main-title">Recent Workspaces</h1>
                     </div>
 
                     {myRooms.length === 0 ? (
@@ -255,7 +320,9 @@ export const Dashboard: React.FC = () => {
                                         onClick={() => navigate(`/room/${room.roomId}`)}
                                     >
                                         <div className="ws-card-top">
-                                            <div className="ws-card-icon"><FileText size={18} strokeWidth={2} /></div>
+                                            <div className="ws-card-icon" style={{ color: room.type === 'code' ? '#a855f7' : '#cbd5e1' }}>
+                                                {room.type === 'code' ? <Code size={18} strokeWidth={2} /> : <FileText size={18} strokeWidth={2} />}
+                                            </div>
                                             <button
                                                 className="ws-card-delete"
                                                 onClick={e => handleDelete(e, room.roomId)}

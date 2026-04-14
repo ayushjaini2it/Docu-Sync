@@ -67,9 +67,33 @@ export interface WorkspaceRoom {
   createdAt: number;
   members: string[]; // List of uids who have ever joined
   activeParticipants: RoomParticipant[]; // Array representing current online users
+  type?: 'text' | 'code';
+  language?: string;
 }
 
 const mockDbKey = "docu-sync-snapshots";
+
+// Room Config 
+export const createRoomConfig = async (roomId: string, type: 'text'|'code', language?: string) => {
+  if (!db) {
+     const existingMap = JSON.parse(localStorage.getItem('local-room-configs') || "{}");
+     existingMap[roomId] = { type, language };
+     localStorage.setItem('local-room-configs', JSON.stringify(existingMap));
+     return;
+  }
+  const roomRef = doc(db, "rooms", roomId);
+  const snap = await getDoc(roomRef);
+  if (!snap.exists()) {
+    await setDoc(roomRef, {
+      roomId,
+      createdAt: Date.now(),
+      members: [],
+      activeParticipants: [],
+      type,
+      language: language || null
+    });
+  }
+};
 
 // Global Room Presence
 export const trackRoomEntry = async (roomId: string, user: any) => {
@@ -84,12 +108,13 @@ export const trackRoomEntry = async (roomId: string, user: any) => {
 
   const roomSnap = await getDoc(roomRef);
   if (!roomSnap.exists()) {
-    // Initialize room on very first entry
+    // Initialize room on very first entry if not created explicitly via dashboard
     await setDoc(roomRef, {
       roomId,
       createdAt: Date.now(),
       members: [user.uid],
-      activeParticipants: [participantData]
+      activeParticipants: [participantData],
+      type: 'text'
     });
   } else {
     // Add user to history and bind them to active participants
@@ -181,4 +206,17 @@ export const getSnapshots = async (roomId: string): Promise<DocumentSnapshot[]> 
         createdAt: new Date(item.createdAt)
       }));
   }
+};
+
+export const getRoomConfig = async (roomId: string): Promise<{ type: 'text'|'code', language?: string }> => {
+  if (db) {
+    const snap = await getDoc(doc(db, "rooms", roomId));
+    if (snap.exists() && snap.data().type) {
+      return { type: snap.data().type, language: snap.data().language };
+    }
+  } else {
+    const map = JSON.parse(localStorage.getItem('local-room-configs') || "{}");
+    if (map[roomId]) return map[roomId];
+  }
+  return { type: 'text' }; // Fallback to traditional text
 };

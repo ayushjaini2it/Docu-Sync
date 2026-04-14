@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { Editor } from '../components/Editor';
+import { CodeEditor } from '../components/CodeEditor';
 import { VersionHistory } from '../components/VersionHistory';
 import { useYjsProvider } from '../hooks/useYjsProvider';
-import { auth, trackRoomEntry, trackRoomExit } from '../utils/firebase';
+import { auth, trackRoomEntry, trackRoomExit, getRoomConfig } from '../utils/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 
@@ -15,6 +16,13 @@ export const EditorRoom: React.FC = () => {
   // Reactive auth state — never read currentUser directly in render
   const [user, setUser] = useState<User | null>(auth?.currentUser || null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [roomConfig, setRoomConfig] = useState<{ type: 'text'|'code', language?: string } | null>(null);
+
+  useEffect(() => {
+    if (roomId) {
+      getRoomConfig(roomId).then(setRoomConfig);
+    }
+  }, [roomId]);
 
   useEffect(() => {
     if (!auth) { setAuthChecked(true); return; }
@@ -75,7 +83,7 @@ export const EditorRoom: React.FC = () => {
     return null;
   }
 
-  if (!ydoc || !awareness) {
+  if (!ydoc || !awareness || !roomConfig) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-main)', color: 'white' }}>
         <div style={{ textAlign: 'center' }}>
@@ -121,7 +129,11 @@ export const EditorRoom: React.FC = () => {
         </div>
         {/* Editor fills remaining height */}
         <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
-          <Editor ydoc={ydoc} awareness={awareness} />
+          {roomConfig.type === 'code' ? (
+            <CodeEditor ydoc={ydoc} awareness={awareness} language={roomConfig.language || 'javascript'} />
+          ) : (
+            <Editor ydoc={ydoc} awareness={awareness} />
+          )}
         </div>
       </div>
     </Layout>
