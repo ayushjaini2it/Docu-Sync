@@ -5,7 +5,7 @@ import type { WorkspaceRoom } from '../utils/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
-import { PenTool, LogIn, LogOut, Plus, ArrowRight, Mail, Users, Trash2, FileText, Clock, LayoutGrid, Sun, Moon } from 'lucide-react';
+import { PenTool, LogIn, LogOut, Plus, ArrowRight, Mail, Trash2, FileText, Clock, LayoutGrid, Sun, Moon } from 'lucide-react';
 import { ThemeContext } from '../App';
 
 export const Dashboard: React.FC = () => {

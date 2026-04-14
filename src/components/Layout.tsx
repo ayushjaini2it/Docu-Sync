@@ -4,8 +4,9 @@ import { ActiveUsers } from './ActiveUsers';
 import { useNavigate } from 'react-router-dom';
 import { logout } from '../utils/firebase';
 import type { Awareness } from 'y-protocols/awareness';
+import * as Y from 'yjs';
 
-export const Layout: React.FC<{ children: React.ReactNode, sidebar: React.ReactNode, awareness: Awareness | null }> = ({ children, sidebar, awareness }) => {
+export const Layout: React.FC<{ children: React.ReactNode, sidebar: React.ReactNode, awareness: Awareness | null, ydoc: Y.Doc | null }> = ({ children, sidebar, awareness, ydoc }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const navigate = useNavigate();
 
@@ -31,7 +32,7 @@ export const Layout: React.FC<{ children: React.ReactNode, sidebar: React.ReactN
           <div className="sidebar-divider" />
 
           {/* Member 3 User Presence Hub - Stacked */}
-          {awareness && <ActiveUsers awareness={awareness} />}
+          {awareness && ydoc && <ActiveUsers awareness={awareness} ydoc={ydoc} />}
         </div>
 
         {/* Global Navigation Actions at the very bottom */}

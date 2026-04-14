@@ -52,6 +52,7 @@ export interface DocumentSnapshot {
   previewText: string;
   updateData: string;
   roomId: string;
+  name?: string;
 }
 
 export interface RoomParticipant {
@@ -119,7 +120,7 @@ export const trackRoomExit = async (roomId: string, user: any) => {
   }
 };
 
-export const saveSnapshot = async (roomId: string, previewText: string, updateBlob: Uint8Array): Promise<void> => {
+export const saveSnapshot = async (roomId: string, previewText: string, updateBlob: Uint8Array, name?: string): Promise<void> => {
   const base64Update = btoa(String.fromCharCode(...updateBlob));
 
   if (db) {
@@ -127,7 +128,8 @@ export const saveSnapshot = async (roomId: string, previewText: string, updateBl
       createdAt: Timestamp.now(),
       roomId,
       previewText,
-      updateData: base64Update
+      updateData: base64Update,
+      ...(name && { name })
     });
   } else {
     const existing = JSON.parse(localStorage.getItem(mockDbKey) || "[]");
@@ -136,7 +138,8 @@ export const saveSnapshot = async (roomId: string, previewText: string, updateBl
       roomId,
       createdAt: new Date().toISOString(),
       previewText,
-      updateData: base64Update
+      updateData: base64Update,
+      ...(name && { name })
     };
     localStorage.setItem(mockDbKey, JSON.stringify([newSnapshot, ...existing]));
   }
@@ -156,7 +159,8 @@ export const getSnapshots = async (roomId: string): Promise<DocumentSnapshot[]> 
             roomId: doc.data().roomId,
             createdAt: doc.data().createdAt.toDate(),
             previewText: doc.data().previewText,
-            updateData: doc.data().updateData
+            updateData: doc.data().updateData,
+            name: doc.data().name
         }));
         
         // Natively sort the results descending in Javascript!

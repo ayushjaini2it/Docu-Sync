@@ -87,7 +87,7 @@ export const EditorRoom: React.FC = () => {
   }
 
   return (
-    <Layout sidebar={<VersionHistory ydoc={ydoc} roomId={roomId} />} awareness={awareness}>
+    <Layout sidebar={<VersionHistory ydoc={ydoc} roomId={roomId} />} awareness={awareness} ydoc={ydoc}>
       <div style={{
         display: 'flex',
         flexDirection: 'column',

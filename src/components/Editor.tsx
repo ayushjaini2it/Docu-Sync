@@ -46,6 +46,35 @@ export const Editor: React.FC<Props> = ({ ydoc, awareness }) => {
     const binding = new QuillBinding(ytext, quill, awareness);
     bindingRef.current = binding;
 
+    const workStats = ydoc.getMap('workStats');
+    ytext.observe((event, transaction) => {
+      if (transaction.local) {
+        const addedChars = event.delta.reduce((acc: number, op: any) => {
+          if (typeof op.insert === 'string') return acc + op.insert.length;
+          return acc;
+        }, 0);
+
+        if (addedChars > 0) {
+          const clientId = ydoc.clientID.toString();
+          const localState = awareness.getLocalState()?.user;
+          if (localState) {
+            const currentStats: any = workStats.get(clientId) || { 
+              name: localState.name, 
+              color: localState.color, 
+              value: 0 
+            };
+            
+            workStats.set(clientId, {
+              ...currentStats,
+              name: localState.name,
+              color: localState.color,
+              value: currentStats.value + addedChars
+            });
+          }
+        }
+      }
+    });
+
     return () => {
       // In StrictMode, we actually prefer to let the single instance live if the component isn't totally unmounted
       // We will only destroy if absolutely necessary, but since the parent wrapper doesn't unmount, keeping it alive fixes y-quill tracking loss.

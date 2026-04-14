@@ -11,6 +11,7 @@ interface Props {
 export const VersionHistory: React.FC<Props> = ({ ydoc, roomId }) => {
   const [snapshots, setSnapshots] = useState<DocumentSnapshot[]>([]);
   const [loading, setLoading] = useState(false);
+  const [snapshotName, setSnapshotName] = useState('');
 
   const fetchSnapshots = async () => {
     setLoading(true);
@@ -28,15 +29,14 @@ export const VersionHistory: React.FC<Props> = ({ ydoc, roomId }) => {
   }, []);
 
   const handleSaveSnapshot = async () => {
+    if (!snapshotName.trim()) return;
+
     try {
       const updateBlob = Y.encodeStateAsUpdate(ydoc);
-      const ytext = ydoc.getText('quill');
-      const textVal = ytext.toString();
-      console.log('SAVE SNAPSHOT CLICKED:', { textVal, ytextLength: ytext.length, updateBlobSize: updateBlob.byteLength });
-      
-      const preview = (textVal.trim() || 'Empty Document').substring(0, 40) + '...';
+      const preview = snapshotName.trim();
 
-      await saveSnapshot(roomId, preview, updateBlob);
+      await saveSnapshot(roomId, preview, updateBlob, snapshotName.trim());
+      setSnapshotName('');
       fetchSnapshots(); 
     } catch (err) {
       console.error('SAVE SNAPSHOT FAILED:', err);
@@ -80,9 +80,23 @@ export const VersionHistory: React.FC<Props> = ({ ydoc, roomId }) => {
         <h2>Time-Travel</h2>
       </div>
       
-      <button className="btn-primary" onClick={handleSaveSnapshot}>
-        Save Snapshot Now
-      </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
+        <input 
+          type="text" 
+          placeholder="Name this snapshot (required)" 
+          value={snapshotName} 
+          onChange={e => setSnapshotName(e.target.value)}
+          style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--surface-base)', color: 'var(--text-main)', fontSize: '0.85rem' }}
+        />
+        <button 
+          className="btn-primary" 
+          style={{ marginBottom: 0, opacity: snapshotName.trim() ? 1 : 0.6, cursor: snapshotName.trim() ? 'pointer' : 'not-allowed' }} 
+          onClick={handleSaveSnapshot}
+          disabled={!snapshotName.trim()}
+        >
+          Save Snapshot Now
+        </button>
+      </div>
       
       <div className="snapshots-list">
         {loading && <p>Loading...</p>}
@@ -91,7 +105,7 @@ export const VersionHistory: React.FC<Props> = ({ ydoc, roomId }) => {
             <div className="snap-time">
               {s.createdAt.toLocaleTimeString()} - {s.createdAt.toLocaleDateString()}
             </div>
-            <div className="snap-preview">"{s.previewText}"</div>
+            {s.name && <div style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-main)', marginBottom: '8px' }}>{s.name}</div>}
             <button className="btn-restore" onClick={() => handleRestore(s.updateData)}>
               <RefreshCw size={14} /> Restore
             </button>
