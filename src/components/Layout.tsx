@@ -56,11 +56,11 @@ export const Layout: React.FC<{ children: React.ReactNode, sidebar: React.ReactN
       
       {/* Responsive Body Container */}
       <div className="app-body">
-        {/* Member 4 Time Travel Sidebar (VS Code Style Left Sidebar) */}
+        {/* Member 4 Time Travel Sidebar (kept on the left) */}
         <aside className={`main-sidebar ${!isSidebarOpen ? 'collapsed' : ''}`}>
           {sidebar}
         </aside>
-        
+
         {/* Editor Central Hub */}
         <main className="main-content">
           {children}
