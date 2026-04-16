@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore, collection, addDoc, getDocs, query, Timestamp, where, doc, setDoc, getDoc, updateDoc, arrayUnion, deleteDoc, writeBatch } from "firebase/firestore";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, signInWithRedirect, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from "firebase/auth";
 
 // Vite environment variables
 const firebaseConfig = {
@@ -25,7 +25,7 @@ export const signInWithGoogle = async () => {
     return { user: { displayName: "Demo User", photoURL: "", uid: "mock-uid-123" } };
   }
   const provider = new GoogleAuthProvider();
-  return await signInWithPopup(auth, provider);
+  return await signInWithRedirect(auth, provider);
 };
 
 export const registerWithEmail = async (email: string, pass: string, name: string) => {
