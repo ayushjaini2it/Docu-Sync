@@ -18,9 +18,9 @@ export function useYjsProvider(
 
   useEffect(() => {
     const doc      = new Y.Doc();
-    const provider = new WebsocketProvider('ws://localhost:1234', roomName, doc);
+    const provider = new WebsocketProvider('wss://websocket-docu-sync.up.railway.app', roomName, doc);
 
-    console.log(`[YJS] 🛰️ Connecting to local WS server for room: ${roomName}`);
+    console.log(`[YJS] 🛰️ Connecting to Railway WS server for room: ${roomName}`);
 
     provider.on('status', (event: any) => {
       console.log(`[YJS] 💡 Connection Status:`, event.status);
