@@ -1,0 +1,3371 @@
+diff --git a/E:/Docu-Sync/src/components/ActiveUsers.tsx b/D:/Projects/Docu-Sync/src/components/ActiveUsers.tsx
+index e9608cc..8f71de3 100644
+--- a/E:/Docu-Sync/src/components/ActiveUsers.tsx
++++ b/D:/Projects/Docu-Sync/src/components/ActiveUsers.tsx
+@@ -1,127 +1,63 @@
+ import React, { useEffect, useState } from 'react';
+ import type { Awareness } from 'y-protocols/awareness';
+-import * as Y from 'yjs';
+-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
++
++interface AwarenessUser {
++  name: string;
++  color: string;
++  photoURL?: string;
++}
+ 
+ interface Props {
+   awareness: Awareness;
+-  ydoc: Y.Doc;
+ }
+ 
+-export const ActiveUsers: React.FC<Props> = ({ awareness, ydoc }) => {
+-  const [users, setUsers] = useState<any[]>([]);
+-  const [statsData, setStatsData] = useState<{name: string, value: number, color: string}[]>([]);
++export const ActiveUsers: React.FC<Props> = ({ awareness }) => {
++  const [users, setUsers] = useState<AwarenessUser[]>([]);
+ 
+   useEffect(() => {
+-    const renderUsers = () => {
+-      const states = Array.from(awareness.getStates().values());
+-      const active = states.filter(state => state.user);
+-      setUsers(active);
++    const render = () => {
++      const states = Array.from(awareness.getStates().values()) as Array<{ user?: AwarenessUser }>;
++      const allUsers = states.filter(s => s.user).map(s => s.user!);
++      const uniqueUsers = Array.from(new Map(allUsers.map(u => [u.name, u])).values());
++      setUsers(uniqueUsers);
+     };
+ 
+-    renderUsers();
+-    awareness.on('change', renderUsers);
+-
+-    return () => {
+-      awareness.off('change', renderUsers);
+-    };
++    render();
++    awareness.on('change', render);
++    return () => awareness.off('change', render);
+   }, [awareness]);
+ 
+-  useEffect(() => {
+-    const workStats = ydoc.getMap('workStats');
+-    
+-    const renderStats = () => {
+-      const merged = new Map<string, any>();
+-      
+-      workStats.forEach((v: any) => {
+-        // Group by user explicitly using color to guarantee continuous slices
+-        if (merged.has(v.color)) {
+-          const current = merged.get(v.color);
+-          merged.set(v.color, { ...current, value: current.value + v.value });
+-        } else {
+-          merged.set(v.color, { name: v.name, value: v.value, color: v.color });
+-        }
+-      });
+-      
+-      setStatsData(Array.from(merged.values()).filter(s => s.value > 0));
+-    };
+-
+-    renderStats();
+-    workStats.observe(renderStats);
+-
+-    return () => {
+-      workStats.unobserve(renderStats);
+-    };
+-  }, [ydoc]);
++  if (users.length === 0) return null;
+ 
+   return (
+-    <div className="active-users-panel">
+-      
+-      {/* Bars of Active Users */}
+-      <div className="user-bars-list">
+-        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
+-          {users.length} Users Online
+-        </div>
+-        {users.map((u, i) => (
+-          <div key={i} className="user-bar">
+-            <div className="user-bar-color-indicator" style={{ backgroundColor: u.user.color }}></div>
+-            <div className="user-bar-details">
+-              <span className="user-bar-name">{u.user.name}</span>
+-              <span className="user-bar-status">Editing</span>
+-            </div>
++    <div className="active-users-vertical">
++      <div className="avatars-group-vertical">
++        {users.slice(0, 6).map((u, i) => (
++          <div
++            key={i}
++            className="avatar-vertical"
++            style={{ borderColor: u.color, background: u.photoURL ? 'transparent' : u.color }}
++            title={u.name}
++          >
++            {u.photoURL ? (
++              <img
++                src={u.photoURL}
++                alt={u.name}
++                style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%', display: 'block' }}
++                onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
++              />
++            ) : (
++              <span>{u.name.charAt(0).toUpperCase()}</span>
++            )}
+           </div>
+         ))}
+-      </div>
+-
+-      {/* Pie Chart of Contributions */}
+-      {statsData.length > 0 && (
+-        <div className="pie-chart-container">
+-          <div className="pie-chart-title">Work Contributions</div>
+-          <div style={{ width: '100%', height: 160 }}>
+-            <ResponsiveContainer width="100%" height="100%">
+-              <PieChart>
+-                <Pie
+-                  data={statsData}
+-                  cx="50%"
+-                  cy="50%"
+-                  innerRadius={40}
+-                  outerRadius={65}
+-                  paddingAngle={2}
+-                  dataKey="value"
+-                  stroke="none"
+-                >
+-                  {statsData.map((entry, index) => (
+-                    <Cell key={`cell-${index}`} fill={entry.color} />
+-                  ))}
+-                </Pie>
+-                <Tooltip 
+-                  contentStyle={{ borderRadius: '8px', border: 'none', background: 'var(--surfaceRaised)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+-                  itemStyle={{ fontSize: '13px', fontWeight: 600, color: 'var(--textMain)' }}
+-                />
+-              </PieChart>
+-            </ResponsiveContainer>
+-          </div>
+-          
+-          {/* Custom Percentage Legend */}
+-          <div style={{ width: '100%', marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+-            {(() => {
+-              const total = statsData.reduce((acc, curr) => acc + curr.value, 0);
+-              return [...statsData].sort((a, b) => b.value - a.value).map((entry, index) => {
+-                const percent = total > 0 ? ((entry.value / total) * 100).toFixed(1) : '0.0';
+-                return (
+-                  <div key={`legend-${index}`} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.82rem' }}>
+-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', paddingRight: '8px' }}>
+-                      <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: entry.color, flexShrink: 0 }}></div>
+-                      <span style={{ color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>{entry.name}</span>
+-                    </div>
+-                    <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{percent}%</span>
+-                  </div>
+-                );
+-              });
+-            })()}
++        {users.length > 6 && (
++          <div className="avatar-vertical avatar-overflow" title={`${users.length - 6} more`}>
++            +{users.length - 6}
+           </div>
+-        </div>
+-      )}
++        )}
++      </div>
++      <div className="users-tooltip">{users.length} Online</div>
+     </div>
+   );
+ };
+diff --git a/E:/Docu-Sync/src/components/CodeEditor.tsx b/E:/Docu-Sync/src/components/CodeEditor.tsx
+deleted file mode 100644
+index 2710bac..0000000
+--- a/E:/Docu-Sync/src/components/CodeEditor.tsx
++++ /dev/null
+@@ -1,169 +0,0 @@
+-import React, { useEffect, useRef, useState } from 'react';
+-import MonacoEditor from '@monaco-editor/react';
+-import * as Y from 'yjs';
+-import { MonacoBinding } from 'y-monaco';
+-import type { Awareness } from 'y-protocols/awareness';
+-
+-interface Props {
+-  ydoc: Y.Doc;
+-  awareness: Awareness;
+-  language: string;
+-}
+-
+-export const CodeEditor: React.FC<Props> = ({ ydoc, awareness, language }) => {
+-  const editorRef = useRef<any>(null);
+-  const bindingRef = useRef<any>(null);
+-  const [output, setOutput] = useState<string>('');
+-  const [running, setRunning] = useState(false);
+-
+-  const handleEditorDidMount = (editor: any) => {
+-    editorRef.current = editor;
+-    const ytext = ydoc.getText('monaco');
+-    bindingRef.current = new MonacoBinding(ytext, editor.getModel(), new Set([editor]), awareness);
+-    
+-    // Inject custom CSS natively for remote cursor styles matching Quill sizes
+-    const style = document.createElement('style');
+-    style.innerHTML = `
+-      .yRemoteSelection { background-color: rgba(250, 129, 0, 0.4); }
+-      .yRemoteSelectionHead { position: absolute; border-left: 2px solid orange; border-top: 2px solid orange; border-bottom: 2px solid orange; }
+-    `;
+-    document.head.appendChild(style);
+-
+-    // Track WorkStats exactly equivalent to the text editor!
+-    const workStats = ydoc.getMap('workStats');
+-    ytext.observe((event, transaction) => {
+-      if (transaction.local) {
+-        let addedChars = 0;
+-        event.delta.forEach((op: any) => {
+-          if (typeof op.insert === 'string') addedChars += op.insert.length;
+-        });
+-
+-        if (addedChars > 0) {
+-          const clientId = ydoc.clientID.toString();
+-          const localState = awareness.getLocalState()?.user;
+-          if (localState) {
+-            const currentStats: any = workStats.get(clientId) || { name: localState.name, color: localState.color, value: 0 };
+-            workStats.set(clientId, { ...currentStats, name: localState.name, color: localState.color, value: currentStats.value + addedChars });
+-          }
+-        }
+-      }
+-    });
+-  };
+-
+-  useEffect(() => {
+-    return () => {
+-      if (bindingRef.current) bindingRef.current.destroy();
+-    };
+-  }, []);
+-
+-  const executeCode = async () => {
+-    if (!editorRef.current) return;
+-    setRunning(true);
+-    setOutput('Starting compiler...');
+-    const sourceCode = editorRef.current.getValue();
+-
+-    if (language.toLowerCase() === 'javascript') {
+-        setTimeout(() => {
+-            let logs: string[] = [];
+-            
+-            // Proxy console.log to intercept the output locally
+-            const originalLog = console.log;
+-            const originalError = console.error;
+-            
+-            console.log = (...args) => {
+-                logs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
+-                originalLog(...args);
+-            };
+-            console.error = (...args) => {
+-                logs.push('[Error] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
+-                originalError(...args);
+-            };
+-
+-            try {
+-                // eslint-disable-next-line no-new-func
+-                const exec = new Function(sourceCode);
+-                exec();
+-                setOutput(logs.join('\n') || '> Executed successfully. (No output)');
+-            } catch (err: any) {
+-                setOutput('Exception: ' + err.message);
+-            } finally {
+-                console.log = originalLog;
+-                console.error = originalError;
+-                setRunning(false);
+-            }
+-        }, 100);
+-    } else {
+-        // Evaluate everything else utilizing reliable remote Wandbox proxies
+-        const compilerMap: Record<string, string> = {
+-            'python': 'cpython-3.14.0',
+-            'c++': 'gcc-13.2.0',
+-            'java': 'openjdk-jdk-21+35',
+-        };
+-        const targetCompiler = compilerMap[language.toLowerCase()] || 'cpython-3.14.0';
+-
+-        try {
+-            const resp = await fetch('https://wandbox.org/api/compile.json', {
+-                method: 'POST',
+-                headers: { 'Content-Type': 'application/json' },
+-                body: JSON.stringify({
+-                    compiler: targetCompiler,
+-                    code: sourceCode
+-                })
+-            });
+-            const data = await resp.json();
+-            
+-            let outputBlock = '';
+-            if (data.compiler_error && data.compiler_error.trim()) {
+-                outputBlock += `[Compiler Exit]\n${data.compiler_error.trim()}\n\n`;
+-            }
+-            if (data.program_message) {
+-                outputBlock += data.program_message;
+-            }
+-
+-            setOutput(outputBlock.trim() || '> Executed successfully. (No output generated)');
+-        } catch (err: any) {
+-            setOutput('Network Proxy Exception: ' + err.message + '\nMake sure you are connected to the internet.');
+-        } finally {
+-            setRunning(false);
+-        }
+-    }
+-  };
+-
+-  return (
+-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+-      {/* Code Editor Top Action Bar */}
+-      <div style={{ padding: '8px 16px', background: 'var(--surface-base)', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 10 }}>
+-         <div style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.85rem' }}>{language.toUpperCase()} ENGINE</div>
+-         <button onClick={executeCode} disabled={running} style={{ padding: '6px 16px', background: '#a855f7', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', cursor: running ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: '0.8rem', opacity: running ? 0.7 : 1 }}>
+-           {running ? 'Compiling...' : 'Run Code'}
+-         </button>
+-      </div>
+-
+-      {/* Editor Body */}
+-      <div style={{ flex: 1, minHeight: 0 }}>
+-        <MonacoEditor
+-          height="100%"
+-          language={language === 'c++' ? 'cpp' : language}
+-          theme="vs-dark"
+-          onMount={handleEditorDidMount}
+-          options={{
+-            minimap: { enabled: false },
+-            fontSize: 14,
+-            wordWrap: 'on',
+-            fontFamily: 'Consolas, "Courier New", monospace'
+-          }}
+-        />
+-      </div>
+-
+-      {/* Compiler Output Console */}
+-      <div style={{ height: '30%', background: '#1e1e1e', borderTop: '2px solid #a855f7', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+-        <div style={{ padding: '6px 16px', background: '#252526', color: '#a855f7', fontSize: '0.75rem', fontWeight: 600, borderBottom: '1px solid #333', display: 'flex', alignItems: 'center', gap: '8px' }}>
+-          <span>TERMINAL OUTPUT</span>
+-        </div>
+-        <div style={{ padding: '12px', color: '#fff', fontFamily: 'Consolas, "Courier New", monospace', fontSize: '13px', overflowY: 'auto', flex: 1, whiteSpace: 'pre-wrap' }}>
+-          {output || '> Waiting for execution cycle...'}
+-        </div>
+-      </div>
+-    </div>
+-  );
+-};
+diff --git a/D:/Projects/Docu-Sync/src/components/DiffOverlay.tsx b/D:/Projects/Docu-Sync/src/components/DiffOverlay.tsx
+new file mode 100644
+index 0000000..65965b2
+--- /dev/null
++++ b/D:/Projects/Docu-Sync/src/components/DiffOverlay.tsx
+@@ -0,0 +1,109 @@
++import React, { useMemo } from 'react';
++import { X, Check, GitCommit, Plus, Minus } from 'lucide-react';
++import type { DocumentSnapshot } from '../utils/firebase';
++import { computeLineDiff, getYDocText, type DiffLine } from '../utils/diff';
++
++interface Props {
++  snapshot: DocumentSnapshot;
++  currentText: string;
++  onApply: () => void;
++  onCancel: () => void;
++}
++
++function timeAgo(date: Date): string {
++  const diff = Math.floor((Date.now() - date.getTime()) / 1000);
++  if (diff < 60) return `${diff}s ago`;
++  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
++  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
++  return `${Math.floor(diff / 86400)}d ago`;
++}
++
++export const DiffOverlay: React.FC<Props> = ({ snapshot, currentText, onApply, onCancel }) => {
++  const targetText = useMemo(() => getYDocText(snapshot.updateData), [snapshot.updateData]);
++
++  // Full diff: current → target (what will change if we apply)
++  const diff: DiffLine[] = useMemo(
++    () => computeLineDiff(currentText, targetText),
++    [currentText, targetText]
++  );
++
++  const addCount = diff.filter(d => d.type === 'add').length;
++  const delCount = diff.filter(d => d.type === 'del').length;
++  const noChanges = addCount === 0 && delCount === 0;
++
++  return (
++    <div className="diff-overlay-backdrop" onClick={onCancel}>
++      <div className="diff-overlay-panel" onClick={e => e.stopPropagation()}>
++
++        {/* ── Header ── */}
++        <div className="diff-overlay-header">
++          <div className="diff-overlay-title-row">
++            <GitCommit size={16} className="diff-overlay-icon" />
++            <div>
++              <div className="diff-overlay-title">Checkout Preview</div>
++              <div className="diff-overlay-subtitle">
++                <span className="diff-hash">#{snapshot.shortHash}</span>
++                <span className="diff-author">by {snapshot.authorName}</span>
++                <span className="diff-time">{timeAgo(snapshot.createdAt)}</span>
++              </div>
++            </div>
++          </div>
++          <button className="diff-overlay-close" onClick={onCancel} aria-label="Close">
++            <X size={18} />
++          </button>
++        </div>
++
++        {/* ── Commit message ── */}
++        <div className="diff-overlay-commit-msg">"{snapshot.commitMessage}"</div>
++
++        {/* ── Stats bar ── */}
++        <div className="diff-stats-bar">
++          <span className="diff-stat-add"><Plus size={12} /> {addCount} addition{addCount !== 1 ? 's' : ''}</span>
++          <span className="diff-stat-del"><Minus size={12} /> {delCount} deletion{delCount !== 1 ? 's' : ''}</span>
++          {noChanges && <span className="diff-stat-eq">No changes vs. current document</span>}
++        </div>
++
++        {/* ── Unified diff view ── */}
++        <div className="diff-overlay-body">
++          {noChanges ? (
++            <div className="diff-overlay-no-diff">
++              <GitCommit size={28} opacity={0.3} />
++              <p>This commit matches the current document — nothing to change.</p>
++            </div>
++          ) : (
++            <div className="diff-code-block">
++              {diff.map((line, idx) => (
++                <div
++                  key={idx}
++                  className={`diff-code-line ${
++                    line.type === 'add' ? 'diff-code-add' :
++                    line.type === 'del' ? 'diff-code-del' :
++                    'diff-code-eq'
++                  }`}
++                >
++                  <span className="diff-code-gutter">
++                    {line.type === 'add' ? '+' : line.type === 'del' ? '−' : ' '}
++                  </span>
++                  <span className="diff-code-text">{line.line || '\u00A0'}</span>
++                </div>
++              ))}
++            </div>
++          )}
++        </div>
++
++        {/* ── Action footer ── */}
++        <div className="diff-overlay-footer">
++          <button className="diff-btn-cancel" onClick={onCancel}>
++            <X size={14} />
++            Cancel
++          </button>
++          <button className="diff-btn-apply" onClick={onApply}>
++            <Check size={14} />
++            Apply Changes
++          </button>
++        </div>
++
++      </div>
++    </div>
++  );
++};
+diff --git a/E:/Docu-Sync/src/components/Editor.tsx b/D:/Projects/Docu-Sync/src/components/Editor.tsx
+index 3152a4b..2ee6b11 100644
+--- a/E:/Docu-Sync/src/components/Editor.tsx
++++ b/D:/Projects/Docu-Sync/src/components/Editor.tsx
+@@ -46,35 +46,6 @@ export const Editor: React.FC<Props> = ({ ydoc, awareness }) => {
+     const binding = new QuillBinding(ytext, quill, awareness);
+     bindingRef.current = binding;
+ 
+-    const workStats = ydoc.getMap('workStats');
+-    ytext.observe((event, transaction) => {
+-      if (transaction.local) {
+-        const addedChars = event.delta.reduce((acc: number, op: any) => {
+-          if (typeof op.insert === 'string') return acc + op.insert.length;
+-          return acc;
+-        }, 0);
+-
+-        if (addedChars > 0) {
+-          const clientId = ydoc.clientID.toString();
+-          const localState = awareness.getLocalState()?.user;
+-          if (localState) {
+-            const currentStats: any = workStats.get(clientId) || { 
+-              name: localState.name, 
+-              color: localState.color, 
+-              value: 0 
+-            };
+-            
+-            workStats.set(clientId, {
+-              ...currentStats,
+-              name: localState.name,
+-              color: localState.color,
+-              value: currentStats.value + addedChars
+-            });
+-          }
+-        }
+-      }
+-    });
+-
+     return () => {
+       // In StrictMode, we actually prefer to let the single instance live if the component isn't totally unmounted
+       // We will only destroy if absolutely necessary, but since the parent wrapper doesn't unmount, keeping it alive fixes y-quill tracking loss.
+diff --git a/E:/Docu-Sync/src/components/Layout.tsx b/D:/Projects/Docu-Sync/src/components/Layout.tsx
+index 408324f..c6352ee 100644
+--- a/E:/Docu-Sync/src/components/Layout.tsx
++++ b/D:/Projects/Docu-Sync/src/components/Layout.tsx
+@@ -4,9 +4,8 @@ import { ActiveUsers } from './ActiveUsers';
+ import { useNavigate } from 'react-router-dom';
+ import { logout } from '../utils/firebase';
+ import type { Awareness } from 'y-protocols/awareness';
+-import * as Y from 'yjs';
+ 
+-export const Layout: React.FC<{ children: React.ReactNode, sidebar: React.ReactNode, awareness: Awareness | null, ydoc: Y.Doc | null }> = ({ children, sidebar, awareness, ydoc }) => {
++export const Layout: React.FC<{ children: React.ReactNode, sidebar: React.ReactNode, awareness: Awareness | null }> = ({ children, sidebar, awareness }) => {
+   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+   const navigate = useNavigate();
+ 
+@@ -32,7 +31,7 @@ export const Layout: React.FC<{ children: React.ReactNode, sidebar: React.ReactN
+           <div className="sidebar-divider" />
+ 
+           {/* Member 3 User Presence Hub - Stacked */}
+-          {awareness && ydoc && <ActiveUsers awareness={awareness} ydoc={ydoc} />}
++          {awareness && <ActiveUsers awareness={awareness} />}
+         </div>
+ 
+         {/* Global Navigation Actions at the very bottom */}
+diff --git a/E:/Docu-Sync/src/components/VersionHistory.tsx b/D:/Projects/Docu-Sync/src/components/VersionHistory.tsx
+index ef37791..e07d4a4 100644
+--- a/E:/Docu-Sync/src/components/VersionHistory.tsx
++++ b/D:/Projects/Docu-Sync/src/components/VersionHistory.tsx
+@@ -1,115 +1,481 @@
+-import React, { useEffect, useState } from 'react';
++import React, { useEffect, useRef, useState } from 'react';
+ import * as Y from 'yjs';
+-import { getSnapshots, saveSnapshot, type DocumentSnapshot } from '../utils/firebase';
+-import { Clock, RefreshCw } from 'lucide-react';
++import { getSnapshots, saveSnapshot, deleteSnapshot, type DocumentSnapshot } from '../utils/firebase';
++import { computeLineDiff, getYDocText, applySnapshotToDoc } from '../utils/diff';
++import { saveDraft, loadDraft, clearDraft } from '../utils/draft';
++import { GitCommit, GitBranch, ChevronDown, ChevronUp, Eye, RotateCcw, Plus, AlertTriangle, Check, X, RotateCw } from 'lucide-react';
++import type { User } from 'firebase/auth';
+ 
+ interface Props {
+   ydoc: Y.Doc;
+   roomId: string;
++  user: User | null;
++  onCheckoutPreview: (snapshot: DocumentSnapshot) => void;
+ }
+ 
+-export const VersionHistory: React.FC<Props> = ({ ydoc, roomId }) => {
++// ── Helpers ───────────────────────────────────────────────────────────────────
++
++function timeAgo(date: Date): string {
++  const diff = Math.floor((Date.now() - date.getTime()) / 1000);
++  if (diff < 60) return `${diff}s ago`;
++  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
++  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
++  return `${Math.floor(diff / 86400)}d ago`;
++}
++
++// ── Commit Entry ──────────────────────────────────────────────────────────────
++
++interface CommitEntryProps {
++  snapshot: DocumentSnapshot;
++  isHead: boolean;
++  prevSnapshot: DocumentSnapshot | null;
++  isLast: boolean;
++  commitsAbove: number;          // how many commits are newer than this one
++  onCheckoutPreview: (snapshot: DocumentSnapshot) => void;
++  onRevert: (snapshot: DocumentSnapshot, prevSnapshot: DocumentSnapshot | null) => void;
++  onReset: (snapshot: DocumentSnapshot) => void;
++  reverting: boolean;
++  resetting: boolean;
++}
++
++const CommitEntry: React.FC<CommitEntryProps> = ({
++  snapshot, isHead, prevSnapshot, isLast, commitsAbove,
++  onCheckoutPreview, onRevert, onReset, reverting, resetting
++}) => {
++  const [expanded, setExpanded] = useState(false);
++  const [diff, setDiff] = useState<Array<{ type: 'add' | 'del' | 'eq'; line: string }> | null>(null);
++  const [confirmReset, setConfirmReset] = useState(false);
++
++  const handleExpand = () => {
++    if (!expanded && diff === null) {
++      const newText = getYDocText(snapshot.updateData);
++      const oldText = prevSnapshot ? getYDocText(prevSnapshot.updateData) : '';
++      setDiff(computeLineDiff(oldText, newText));
++    }
++    setExpanded(v => !v);
++  };
++
++  const initials = snapshot.authorName
++    .split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
++  const avatarColor = `hsl(${(snapshot.shortHash.charCodeAt(0) * 37) % 360}, 65%, 50%)`;
++
++  return (
++    <div className={`git-commit-entry ${isLast ? 'git-commit-last' : ''}`}>
++      {/* Vertical connector */}
++      <div className="git-connector-col">
++        <div className={`git-commit-dot ${isHead ? 'git-dot-head' : ''}`} />
++        {!isLast && <div className="git-line-segment" />}
++      </div>
++
++      {/* Commit body */}
++      <div className="git-commit-body">
++        <div
++          className="git-commit-top"
++          onClick={handleExpand}
++          role="button"
++          tabIndex={0}
++          onKeyDown={e => e.key === 'Enter' && handleExpand()}
++        >
++          <div className="git-commit-row1">
++            {isHead && <span className="git-head-badge">HEAD</span>}
++            <span className="git-hash">#{snapshot.shortHash}</span>
++            <span className="git-time">{timeAgo(snapshot.createdAt)}</span>
++          </div>
++          <div className="git-commit-message">{snapshot.commitMessage}</div>
++          <div className="git-commit-author-row">
++            {snapshot.authorAvatar ? (
++              <img src={snapshot.authorAvatar} alt={snapshot.authorName} className="git-author-avatar" />
++            ) : (
++              <div className="git-author-initials" style={{ background: avatarColor }}>{initials}</div>
++            )}
++            <span className="git-author-name">{snapshot.authorName}</span>
++            <button className="git-expand-btn" aria-label="Toggle diff">
++              {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
++            </button>
++          </div>
++        </div>
++
++        {/* Inline mini-diff (only +/- lines) */}
++        {expanded && (
++          <div className="git-diff-panel">
++            {diff === null ? (
++              <p className="git-diff-empty">Loading diff…</p>
++            ) : diff.filter(d => d.type !== 'eq').length === 0 ? (
++              <p className="git-diff-empty">No changes vs. previous commit.</p>
++            ) : (
++              <div className="git-diff-lines">
++                {diff.map((d, idx) =>
++                  d.type === 'eq' ? null : (
++                    <div key={idx} className={`git-diff-line git-diff-${d.type}`}>
++                      <span className="git-diff-symbol">{d.type === 'add' ? '+' : '−'}</span>
++                      <span className="git-diff-text">{d.line || ' '}</span>
++                    </div>
++                  )
++                )}
++              </div>
++            )}
++
++            {/* Action buttons */}
++            <div className="git-action-row">
++              {/* Checkout: preview full diff in editor overlay */}
++              <button
++                className="git-action-btn git-action-checkout"
++                onClick={() => onCheckoutPreview(snapshot)}
++                title="Preview what the editor will look like after applying this commit"
++              >
++                <Eye size={13} />
++                Checkout
++              </button>
++
++              {/* Revert: create a new inverse commit */}
++              <button
++                className="git-action-btn git-action-revert"
++                onClick={() => onRevert(snapshot, prevSnapshot)}
++                disabled={reverting || resetting}
++                title="Create a new commit that undoes this commit's changes"
++              >
++                {reverting ? <span className="git-spinner git-spinner-sm" /> : <RotateCcw size={13} />}
++                Revert
++              </button>
++            </div>
++
++            {/* Reset to here — only shown for non-HEAD commits */}
++            {!isHead && commitsAbove > 0 && (
++              !confirmReset ? (
++                <button
++                  className="git-reset-btn"
++                  onClick={() => setConfirmReset(true)}
++                  disabled={resetting}
++                  title={`Delete the ${commitsAbove} commit${commitsAbove > 1 ? 's' : ''} above and reset to this point`}
++                >
++                  <RotateCw size={12} />
++                  Reset to here
++                </button>
++              ) : (
++                <div className="git-reset-confirm">
++                  <div className="git-reset-confirm-text">
++                    <AlertTriangle size={13} />
++                    Delete <strong>{commitsAbove}</strong> newer commit{commitsAbove > 1 ? 's' : ''}? This cannot be undone.
++                  </div>
++                  <div className="git-reset-confirm-actions">
++                    <button
++                      className="git-reset-confirm-yes"
++                      onClick={() => { setConfirmReset(false); onReset(snapshot); }}
++                      disabled={resetting}
++                    >
++                      {resetting ? <span className="git-spinner git-spinner-sm" /> : <Check size={12} />}
++                      Confirm
++                    </button>
++                    <button
++                      className="git-reset-confirm-no"
++                      onClick={() => setConfirmReset(false)}
++                      disabled={resetting}
++                    >
++                      <X size={12} />
++                      Cancel
++                    </button>
++                  </div>
++                </div>
++              )
++            )}
++          </div>
++        )}
++      </div>
++    </div>
++  );
++};
++
++// ── Main Component ────────────────────────────────────────────────────────────
++
++export const VersionHistory: React.FC<Props> = ({ ydoc, roomId, user, onCheckoutPreview }) => {
+   const [snapshots, setSnapshots] = useState<DocumentSnapshot[]>([]);
+   const [loading, setLoading] = useState(false);
+-  const [snapshotName, setSnapshotName] = useState('');
++  const [committing, setCommitting] = useState(false);
++  const [reverting, setReverting] = useState(false);
++  const [resetting, setResetting] = useState(false);
++  const [message, setMessage] = useState('');
++  const [error, setError] = useState('');
++  // Draft recovery banner state
++  const [draftInfo, setDraftInfo] = useState<{ savedAt: Date } | null>(null);
++  const [resetToast, setResetToast] = useState<string | null>(null);
++  const inputRef = useRef<HTMLInputElement>(null);
++  const isFirstLoad = useRef(true);
++  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
++  // Guard: never save a draft during startup (prevents overwriting a real draft with HEAD state)
++  const canSaveDraft = useRef(false);
++
++  // ── Auto-save draft on every Yjs update (debounced 1.5s) ──────────────────
++  useEffect(() => {
++    // Safe base64 for large Uint8Arrays (avoids call-stack overflow on spread)
++    const uint8ToB64 = (arr: Uint8Array): string => {
++      let binary = '';
++      const chunk = 8192;
++      for (let i = 0; i < arr.length; i += chunk) {
++        binary += String.fromCharCode(...arr.subarray(i, i + chunk));
++      }
++      return btoa(binary);
++    };
++
++    const handler = () => {
++      if (!canSaveDraft.current) return;   // blocked during startup
++      if (debounceTimer.current) clearTimeout(debounceTimer.current);
++      debounceTimer.current = setTimeout(() => {
++        const blob = Y.encodeStateAsUpdate(ydoc);
++        saveDraft(roomId, uint8ToB64(blob));
++      }, 1500);
++    };
++    ydoc.on('update', handler);
++    return () => {
++      ydoc.off('update', handler);
++      if (debounceTimer.current) clearTimeout(debounceTimer.current);
++    };
++  }, [ydoc, roomId]);
+ 
+   const fetchSnapshots = async () => {
+     setLoading(true);
+     try {
+       const data = await getSnapshots(roomId);
+       setSnapshots(data);
++
++      // On first load: restore HEAD, then check for a newer unsaved draft
++      if (isFirstLoad.current) {
++        isFirstLoad.current = false;
++
++        // 1. Apply HEAD first
++        if (data.length > 0) {
++          applySnapshotToDoc(ydoc, data[0].updateData);
++        }
++
++        // 2. Check if a local draft exists
++        const draft = loadDraft(roomId);
++        if (draft) {
++          const headText = data.length > 0 ? getYDocText(data[0].updateData) : '';
++          const draftText = getYDocText(draft.data);
++          if (draftText.trim() !== headText.trim()) {
++            setDraftInfo({ savedAt: draft.savedAt });
++          } else {
++            clearDraft(roomId);
++          }
++        }
++
++        // 3. Only unlock auto-save AFTER startup has fully settled.
++        //    3 seconds gives the Yjs WebRTC provider time to sync so it
++        //    cannot fire an 'update' that overwrites the user's real draft.
++        setTimeout(() => { canSaveDraft.current = true; }, 3000);
++      }
+     } catch (e) {
+       console.error(e);
+     }
+     setLoading(false);
+   };
+ 
+-  useEffect(() => {
+-    fetchSnapshots();
+-  }, []);
++  useEffect(() => { fetchSnapshots(); }, []);
+ 
+-  const handleSaveSnapshot = async () => {
+-    if (!snapshotName.trim()) return;
++  const doCommit = async (msg: string): Promise<void> => {
++    const updateBlob = Y.encodeStateAsUpdate(ydoc);
++    const ytext = ydoc.getText('quill');
++    const preview = (ytext.toString().trim() || 'Empty Document').substring(0, 40);
++    await saveSnapshot(
++      roomId, preview, updateBlob, msg,
++      user?.displayName || 'Anonymous',
++      user?.photoURL || ''
++    );
++  };
+ 
++  const handleCommit = async () => {
++    const msg = message.trim();
++    if (!msg) { setError('Please enter a commit message.'); inputRef.current?.focus(); return; }
++    setError('');
++    setCommitting(true);
+     try {
+-      const updateBlob = Y.encodeStateAsUpdate(ydoc);
+-      const preview = snapshotName.trim();
+-
+-      await saveSnapshot(roomId, preview, updateBlob, snapshotName.trim());
+-      setSnapshotName('');
+-      fetchSnapshots(); 
++      await doCommit(msg);
++      setMessage('');
++      clearDraft(roomId);  // committed — draft no longer needed
++      setDraftInfo(null);
++      await fetchSnapshots();
+     } catch (err) {
+-      console.error('SAVE SNAPSHOT FAILED:', err);
++      console.error('Commit failed:', err);
++      setError('Failed to save commit. Try again.');
+     }
++    setCommitting(false);
+   };
+ 
+-  const handleRestore = (updateDataB64: string) => {
+-    // Note: removed window.confirm block so Time Travel operates seamlessly
+-    const binaryString = atob(updateDataB64);
+-    const updateBlob = new Uint8Array(binaryString.length);
+-    for (let i = 0; i < binaryString.length; i++) {
+-      updateBlob[i] = binaryString.charCodeAt(i);
+-    }
+-
++  /**
++   * git revert <hash>:
++   *   1. Apply the state from BEFORE the target commit (prevSnapshot's state, or empty)
++   *   2. Auto-create a new commit: "Revert: <original message>"
++   */
++  const handleRevert = async (
++    snapshot: DocumentSnapshot,
++    prevSnapshot: DocumentSnapshot | null
++  ) => {
++    setReverting(true);
+     try {
+-      console.log('RESTORE CLICKED for snapshot');
+       const ytext = ydoc.getText('quill');
+-      console.log('Current Text length:', ytext.length);
+-      
+-      // We must clear existing text. Quill always has at least 1 length (a newline)
+-      if (ytext.length > 0) {
+-        ytext.delete(0, ytext.length); 
++
++      if (prevSnapshot) {
++        // Apply the pre-revert state to the live doc
++        const binary = atob(prevSnapshot.updateData);
++        const blob = new Uint8Array(binary.length);
++        for (let i = 0; i < binary.length; i++) blob[i] = binary.charCodeAt(i);
++        if (ytext.length > 0) ytext.delete(0, ytext.length);
++        const tmp = new Y.Doc();
++        Y.applyUpdate(tmp, blob);
++        ytext.applyDelta(tmp.getText('quill').toDelta());
++      } else {
++        // No previous commit → revert to empty
++        if (ytext.length > 0) ytext.delete(0, ytext.length);
+       }
+-      
+-      const tempDoc = new Y.Doc();
+-      Y.applyUpdate(tempDoc, updateBlob);
+-      const oldDelta = tempDoc.getText('quill').toDelta();
+-      console.log('Old Delta to apply:', oldDelta);
+-      
+-      ytext.applyDelta(oldDelta);
+-      console.log('Restore successfully applied');
++
++      // Auto-commit the revert
++      await doCommit(`Revert: "${snapshot.commitMessage}"`);
++      clearDraft(roomId);
++      setDraftInfo(null);
++      await fetchSnapshots();
+     } catch (err) {
+-      console.error('RESTORE FAILED:', err);
++      console.error('Revert failed:', err);
+     }
++    setReverting(false);
++  };
++
++  const handleRestoreDraft = () => {
++    const draft = loadDraft(roomId);
++    if (!draft) return;
++    applySnapshotToDoc(ydoc, draft.data);
++    setDraftInfo(null);
++    // Keep draft in storage until they commit it
++  };
++
++  const handleDiscardDraft = () => {
++    clearDraft(roomId);
++    setDraftInfo(null);
++  };
++
++  /**
++   * git reset --hard <hash>:
++   *   Deletes ALL commits newer than the target (parallel Firestore deletes),
++   *   then applies the target's state to the editor.
++   *   idx = position of the target in the sorted snapshots array (0 = HEAD).
++   */
++  const handleReset = async (snapshot: DocumentSnapshot) => {
++    const idx = snapshots.findIndex(s => s.id === snapshot.id);
++    if (idx <= 0) return;
++    const toDelete = snapshots.slice(0, idx);
++    setResetting(true);
++    try {
++      await Promise.all(toDelete.map(s => deleteSnapshot(s.id)));
++      // NOTE: We intentionally do NOT apply the snapshot to the live Yjs doc.
++      // The live doc is the shared working tree — resetting history should not
++      // overwrite peers' unsaved work. Use Checkout to explicitly apply.
++      clearDraft(roomId);
++      setDraftInfo(null);
++      setResetToast(`HEAD moved to #${snapshot.shortHash}. Use Checkout on the new HEAD to apply it to the editor.`);
++      setTimeout(() => setResetToast(null), 6000);
++      await fetchSnapshots();
++    } catch (err) {
++      console.error('Reset failed:', err);
++    }
++    setResetting(false);
+   };
+ 
+   return (
+-    <div className="version-sidebar">
+-      <div className="version-header">
+-        <Clock size={20} />
+-        <h2>Time-Travel</h2>
++    <div className="git-sidebar">
++      {/* Header */}
++      <div className="git-sidebar-header">
++        <GitBranch size={18} className="git-header-icon" />
++        <span className="git-sidebar-title">Version Control</span>
++      </div>
++      <div className="git-branch-pill">
++        <span className="git-branch-dot" />
++        main
+       </div>
+-      
+-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
+-        <input 
+-          type="text" 
+-          placeholder="Name this snapshot (required)" 
+-          value={snapshotName} 
+-          onChange={e => setSnapshotName(e.target.value)}
+-          style={{ width: '100%', padding: '10px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', background: 'var(--surface-base)', color: 'var(--text-main)', fontSize: '0.85rem' }}
++
++      {/* Reset toast notification */}
++      {resetToast && (
++        <div className="git-reset-toast">
++          <GitCommit size={13} />
++          {resetToast}
++        </div>
++      )}
++
++      {/* Draft recovery banner */}
++      {draftInfo && (
++        <div className="draft-recovery-banner">
++          <div className="draft-banner-top">
++            <AlertTriangle size={14} className="draft-banner-icon" />
++            <div className="draft-banner-text">
++              <strong>Unsaved draft found</strong>
++              <span>Last autosaved {timeAgo(draftInfo.savedAt)}</span>
++            </div>
++          </div>
++          <div className="draft-banner-actions">
++            <button className="draft-btn-restore" onClick={handleRestoreDraft}>
++              <Check size={13} /> Restore
++            </button>
++            <button className="draft-btn-discard" onClick={handleDiscardDraft}>
++              <X size={13} /> Discard
++            </button>
++          </div>
++        </div>
++      )}
++
++      {/* Commit input */}
++      <div className="git-commit-input-panel">
++        <input
++          ref={inputRef}
++          className={`git-message-input ${error ? 'git-message-input-error' : ''}`}
++          placeholder="Describe your changes…"
++          value={message}
++          onChange={e => { setMessage(e.target.value); setError(''); }}
++          onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleCommit()}
++          maxLength={72}
++          disabled={committing}
+         />
+-        <button 
+-          className="btn-primary" 
+-          style={{ marginBottom: 0, opacity: snapshotName.trim() ? 1 : 0.6, cursor: snapshotName.trim() ? 'pointer' : 'not-allowed' }} 
+-          onClick={handleSaveSnapshot}
+-          disabled={!snapshotName.trim()}
++        {error && <p className="git-input-error">{error}</p>}
++        <button
++          className="git-commit-btn"
++          onClick={handleCommit}
++          disabled={committing || !message.trim()}
+         >
+-          Save Snapshot Now
++          {committing ? <span className="git-spinner" /> : <Plus size={14} />}
++          {committing ? 'Committing…' : 'Commit'}
+         </button>
+       </div>
+-      
+-      <div className="snapshots-list">
+-        {loading && <p>Loading...</p>}
+-        {snapshots.map(s => (
+-          <div key={s.id} className="snapshot-card">
+-            <div className="snap-time">
+-              {s.createdAt.toLocaleTimeString()} - {s.createdAt.toLocaleDateString()}
+-            </div>
+-            {s.name && <div style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-main)', marginBottom: '8px' }}>{s.name}</div>}
+-            <button className="btn-restore" onClick={() => handleRestore(s.updateData)}>
+-              <RefreshCw size={14} /> Restore
+-            </button>
++
++      {/* Section label */}
++      <div className="git-section-label">
++        <GitCommit size={13} />
++        {snapshots.length} commit{snapshots.length !== 1 ? 's' : ''}
++      </div>
++
++      {/* Timeline */}
++      <div className="git-timeline">
++        {loading && (
++          <div className="git-loading">
++            <span className="git-spinner" />
++            Loading history…
++          </div>
++        )}
++        {!loading && snapshots.length === 0 && (
++          <div className="git-empty-state">
++            <GitCommit size={32} opacity={0.3} />
++            <p>No commits yet.<br />Make your first commit above.</p>
+           </div>
++        )}
++        {snapshots.map((s, idx) => (
++          <CommitEntry
++            key={s.id}
++            snapshot={s}
++            isHead={idx === 0}
++            prevSnapshot={snapshots[idx + 1] || null}
++            isLast={idx === snapshots.length - 1}
++            commitsAbove={idx}          // number of commits newer than this one
++            onCheckoutPreview={onCheckoutPreview}
++            onRevert={handleRevert}
++            onReset={handleReset}
++            reverting={reverting}
++            resetting={resetting}
++          />
+         ))}
+       </div>
+     </div>
+diff --git a/E:/Docu-Sync/src/hooks/useYjsProvider.ts b/D:/Projects/Docu-Sync/src/hooks/useYjsProvider.ts
+index 6c4f675..6de0c3f 100644
+--- a/E:/Docu-Sync/src/hooks/useYjsProvider.ts
++++ b/D:/Projects/Docu-Sync/src/hooks/useYjsProvider.ts
+@@ -3,28 +3,29 @@ import * as Y from 'yjs';
+ import { WebrtcProvider } from 'y-webrtc';
+ import type { Awareness } from 'y-protocols/awareness';
+ 
+-// Constants for Member 3 avatar colors
+ const USER_COLORS = ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#6366f1', '#a855f7', '#ec4899'];
+-const USER_NAMES = ['Anonymous Hippo', 'Curious Cheetah', 'Sleek Python', 'Silent Owl', 'Happy Dolphin', 'Brave Lion', 'Electric Fox'];
++const USER_NAMES  = ['Anonymous Hippo', 'Curious Cheetah', 'Sleek Python', 'Silent Owl', 'Happy Dolphin', 'Brave Lion', 'Electric Fox'];
+ 
+-export function useYjsProvider(roomName: string, userName?: string, userColor?: string) {
+-  const [ydoc, setYdoc] = useState<Y.Doc | null>(null);
++export function useYjsProvider(
++  roomName: string,
++  userName?: string,
++  userColor?: string,
++  userPhotoURL?: string          // ← new: propagate avatar into awareness
++) {
++  const [ydoc, setYdoc]           = useState<Y.Doc | null>(null);
+   const [awareness, setAwareness] = useState<Awareness | null>(null);
+ 
+   useEffect(() => {
+-    // Member 2: Initialize Core Yjs Engine
+-    const doc = new Y.Doc();
+-    
+-    // Connect to WebRTC Provider for P2P Real-Time Sync
++    const doc      = new Y.Doc();
+     const provider = new WebrtcProvider(roomName, doc);
+-    
+-    // Member 3: Setup Local Awareness State
++
+     const fallbackColor = USER_COLORS[Math.floor(Math.random() * USER_COLORS.length)];
+-    const fallbackName = USER_NAMES[Math.floor(Math.random() * USER_NAMES.length)];
+-    
++    const fallbackName  = USER_NAMES [Math.floor(Math.random() * USER_NAMES.length)];
++
+     provider.awareness.setLocalStateField('user', {
+-      name: userName || fallbackName,
+-      color: userColor || fallbackColor
++      name:     userName     || fallbackName,
++      color:    userColor    || fallbackColor,
++      photoURL: userPhotoURL || '',       // always include, even if empty
+     });
+ 
+     setYdoc(doc);
+@@ -36,5 +37,18 @@ export function useYjsProvider(roomName: string, userName?: string, userColor?:
+     };
+   }, [roomName]);
+ 
++  // Update awareness fields when auth resolves after the provider is up
++  useEffect(() => {
++    if (!awareness) return;
++    const current = awareness.getLocalState();
++    if (!current) return;
++    awareness.setLocalStateField('user', {
++      ...current.user,
++      name:     userName     || current.user?.name     || '',
++      color:    userColor    || current.user?.color    || USER_COLORS[0],
++      photoURL: userPhotoURL || current.user?.photoURL || '',
++    });
++  }, [awareness, userName, userColor, userPhotoURL]);
++
+   return { ydoc, awareness };
+ }
+diff --git a/E:/Docu-Sync/src/index.css b/D:/Projects/Docu-Sync/src/index.css
+index 6d421e2..009a187 100644
+--- a/E:/Docu-Sync/src/index.css
++++ b/D:/Projects/Docu-Sync/src/index.css
+@@ -67,15 +67,15 @@ body {
+ 
+ /* Left Nav Sidebar Styling */
+ .left-sidebar {
+-  width: 260px; 
++  width: 72px; 
+   background: var(--surface);
+   border-right: 1px solid var(--border-subtle);
+   display: flex;
+   flex-direction: column;
+-  padding: 1.5rem 1rem;
++  align-items: center;
++  padding: 1.5rem 0;
+   z-index: 10;
+   flex-shrink: 0;
+-  overflow-y: auto;
+ }
+ 
+ .brand-section-vertical {
+@@ -85,16 +85,16 @@ body {
+ .sidebar-vertical-actions {
+   display: flex;
+   flex-direction: column;
+-  align-items: stretch;
++  align-items: center;
+   gap: 16px;
+   width: 100%;
+ }
+ 
+ .sidebar-divider {
+-  width: 100%;
++  width: 40px;
+   height: 1px;
+   background: var(--border-subtle);
+-  margin: 16px 0;
++  margin: 8px 0;
+ }
+ 
+ .btn-toggle-sidebar {
+@@ -1136,128 +1136,1178 @@ body {
+ [data-theme='dark'] .ws-card-avatar-more { background: rgba(30, 41, 59, 0.9); }
+ 
+ /* ─────────────────────────────────────────────────────────────────────────────
+-   ACTIVE USERS & PIE CHART
++   GIT-STYLE VERSION CONTROL SIDEBAR
+ ───────────────────────────────────────────────────────────────────────────── */
+-.active-users-panel {
++
++.git-sidebar {
+   display: flex;
+   flex-direction: column;
+-  gap: 16px;
+-  width: 100%;
++  height: 100%;
++  overflow: hidden;
++  font-family: 'Inter', sans-serif;
++}
++
++.git-sidebar-header {
++  display: flex;
++  align-items: center;
++  gap: 10px;
++  margin-bottom: 6px;
++  flex-shrink: 0;
++}
++
++.git-header-icon { color: var(--primary); }
++
++.git-sidebar-title {
++  font-family: 'Outfit', sans-serif;
++  font-size: 1.1rem;
++  font-weight: 700;
++  color: var(--text-main);
++  letter-spacing: -0.3px;
++}
++
++/* Branch pill */
++.git-branch-pill {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  background: rgba(99, 102, 241, 0.08);
++  border: 1px solid rgba(99, 102, 241, 0.2);
++  color: var(--primary);
++  font-size: 0.75rem;
++  font-weight: 600;
++  font-family: 'Courier New', monospace;
++  padding: 3px 10px;
++  border-radius: 20px;
++  margin-bottom: 20px;
++  width: fit-content;
++}
++
++.git-branch-dot {
++  width: 7px;
++  height: 7px;
++  background: #22c55e;
++  border-radius: 50%;
++  flex-shrink: 0;
++  box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+ }
+ 
+-.user-bars-list {
++/* Commit input panel */
++.git-commit-input-panel {
+   display: flex;
+   flex-direction: column;
+   gap: 8px;
+-  max-height: 200px;
+-  overflow-y: auto;
++  margin-bottom: 20px;
++  flex-shrink: 0;
++}
++
++.git-message-input {
++  width: 100%;
++  padding: 10px 14px;
++  background: var(--surface-raised);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-sm);
++  color: var(--text-main);
++  font-size: 0.875rem;
++  font-family: 'Inter', sans-serif;
++  outline: none;
++  transition: border-color 0.15s, box-shadow 0.15s;
++  box-sizing: border-box;
++}
++
++.git-message-input::placeholder { color: var(--text-muted); }
++
++.git-message-input:focus {
++  border-color: var(--primary);
++  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
++}
++
++.git-message-input-error {
++  border-color: #ef4444 !important;
++  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
++}
++
++.git-input-error {
++  font-size: 0.78rem;
++  color: #ef4444;
++  margin: 0;
++  padding-left: 2px;
+ }
+ 
+-.user-bar {
++.git-commit-btn {
+   display: flex;
+   align-items: center;
+-  gap: 12px;
+-  background: var(--surface-base);
+-  border: 1px solid var(--border-subtle);
++  justify-content: center;
++  gap: 7px;
++  width: 100%;
++  padding: 10px 14px;
++  background: var(--accent-gradient);
++  color: white;
++  border: none;
+   border-radius: var(--radius-sm);
+-  padding: 8px 12px;
+-  transition: transform 0.2s, box-shadow 0.2s;
++  font-size: 0.875rem;
++  font-weight: 600;
++  font-family: 'Inter', sans-serif;
++  cursor: pointer;
++  transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+ }
+ 
+-.user-bar:hover {
+-  transform: translateX(4px);
+-  box-shadow: var(--shadow-card);
+-  border-color: var(--border-focus);
++.git-commit-btn:hover:not(:disabled) {
++  transform: translateY(-1px);
++  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.35);
++}
++
++.git-commit-btn:active:not(:disabled) { transform: translateY(0); }
++
++.git-commit-btn:disabled {
++  opacity: 0.45;
++  cursor: not-allowed;
++}
++
++/* Section label */
++.git-section-label {
++  display: flex;
++  align-items: center;
++  gap: 7px;
++  font-size: 0.72rem;
++  font-weight: 600;
++  color: var(--text-muted);
++  text-transform: uppercase;
++  letter-spacing: 0.6px;
++  margin-bottom: 16px;
++  flex-shrink: 0;
++}
++
++/* Timeline scroll area */
++.git-timeline {
++  flex: 1;
++  overflow-y: auto;
++  padding-right: 4px;
++  padding-bottom: 24px;
++}
++
++.git-timeline::-webkit-scrollbar { width: 4px; }
++.git-timeline::-webkit-scrollbar-track { background: transparent; }
++.git-timeline::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 99px; }
++
++/* Commit entry row */
++.git-commit-entry {
++  display: flex;
++  gap: 0;
++  position: relative;
++  animation: gitFadeIn 0.3s ease forwards;
++}
++
++@keyframes gitFadeIn {
++  from { opacity: 0; transform: translateX(-6px); }
++  to   { opacity: 1; transform: translateX(0); }
++}
++
++/* Left connector column */
++.git-connector-col {
++  display: flex;
++  flex-direction: column;
++  align-items: center;
++  width: 28px;
++  flex-shrink: 0;
++  padding-top: 14px;
+ }
+ 
+-.user-bar-color-indicator {
++.git-commit-dot {
+   width: 12px;
+   height: 12px;
+   border-radius: 50%;
++  border: 2px solid var(--primary);
++  background: var(--surface);
+   flex-shrink: 0;
+-  border: 1px solid rgba(0,0,0,0.1);
++  transition: all 0.2s ease;
++  z-index: 1;
+ }
+ 
+-.user-bar-details {
+-  display: flex;
+-  flex-direction: column;
++.git-dot-head {
++  background: var(--primary);
++  box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
++  width: 14px;
++  height: 14px;
++}
++
++.git-line-segment {
+   flex: 1;
++  width: 2px;
++  background: var(--border-subtle);
++  margin-top: 4px;
++  min-height: 20px;
+ }
+ 
+-.user-bar-name {
+-  font-size: 0.85rem;
++/* Right commit body */
++.git-commit-body {
++  flex: 1;
++  padding-bottom: 20px;
++  min-width: 0;
++}
++
++.git-commit-last > .git-commit-body { padding-bottom: 8px; }
++
++.git-commit-top {
++  cursor: pointer;
++  padding: 10px 12px;
++  border-radius: var(--radius-sm);
++  border: 1px solid transparent;
++  transition: background 0.15s, border-color 0.15s;
++  user-select: none;
++}
++
++.git-commit-top:hover {
++  background: var(--surface-raised);
++  border-color: var(--border-subtle);
++}
++
++.git-commit-top:focus-visible {
++  outline: 2px solid var(--primary);
++  outline-offset: 2px;
++}
++
++/* Row 1: badges + hash + time */
++.git-commit-row1 {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  margin-bottom: 5px;
++  flex-wrap: wrap;
++}
++
++.git-head-badge {
++  font-size: 0.65rem;
++  font-weight: 700;
++  font-family: 'Courier New', monospace;
++  background: rgba(34, 197, 94, 0.12);
++  color: #16a34a;
++  border: 1px solid rgba(34, 197, 94, 0.3);
++  padding: 1px 7px;
++  border-radius: 99px;
++  letter-spacing: 0.5px;
++  text-transform: uppercase;
++}
++
++.git-hash {
++  font-size: 0.72rem;
++  font-family: 'Courier New', monospace;
++  color: var(--primary);
++  font-weight: 600;
++  letter-spacing: 0.3px;
++  background: rgba(99, 102, 241, 0.07);
++  padding: 1px 6px;
++  border-radius: 4px;
++}
++
++.git-time {
++  font-size: 0.7rem;
++  color: var(--text-muted);
++  margin-left: auto;
++}
++
++/* Commit message */
++.git-commit-message {
++  font-size: 0.875rem;
+   font-weight: 600;
+   color: var(--text-main);
+-  white-space: nowrap;
++  margin-bottom: 7px;
++  line-height: 1.4;
++  word-break: break-word;
++}
++
++/* Author row */
++.git-commit-author-row {
++  display: flex;
++  align-items: center;
++  gap: 7px;
++}
++
++.git-author-avatar {
++  width: 20px;
++  height: 20px;
++  border-radius: 50%;
++  object-fit: cover;
++  flex-shrink: 0;
++}
++
++.git-author-initials {
++  width: 20px;
++  height: 20px;
++  border-radius: 50%;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  font-size: 0.6rem;
++  font-weight: 700;
++  color: white;
++  flex-shrink: 0;
++}
++
++.git-author-name {
++  font-size: 0.75rem;
++  color: var(--text-muted);
++  flex: 1;
+   overflow: hidden;
+   text-overflow: ellipsis;
++  white-space: nowrap;
+ }
+ 
+-.user-bar-status {
+-  font-size: 0.7rem;
++.git-expand-btn {
++  background: none;
++  border: none;
++  color: var(--text-muted);
++  cursor: pointer;
++  display: flex;
++  align-items: center;
++  padding: 2px;
++  border-radius: 4px;
++  transition: color 0.15s, background 0.15s;
++  margin-left: auto;
++}
++
++.git-expand-btn:hover {
+   color: var(--primary);
+-  font-weight: 500;
++  background: rgba(99, 102, 241, 0.08);
+ }
+ 
+-.pie-chart-container {
+-  background: var(--surface-base);
++/* Diff panel */
++.git-diff-panel {
++  margin: 6px 12px 0;
++  background: var(--surface-raised);
+   border: 1px solid var(--border-subtle);
+-  border-radius: var(--radius-md);
+-  padding: 16px;
++  border-radius: var(--radius-sm);
++  overflow: hidden;
++  animation: gitFadeIn 0.2s ease forwards;
++}
++
++.git-diff-lines {
++  max-height: 220px;
++  overflow-y: auto;
++  padding: 10px 0;
++  font-family: 'Courier New', monospace;
++  font-size: 0.75rem;
++  line-height: 1.6;
++}
++
++.git-diff-lines::-webkit-scrollbar { width: 3px; }
++.git-diff-lines::-webkit-scrollbar-track { background: transparent; }
++.git-diff-lines::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 99px; }
++
++.git-diff-line {
+   display: flex;
+-  flex-direction: column;
+-  align-items: center;
++  align-items: baseline;
++  gap: 8px;
++  padding: 1px 12px;
+ }
+ 
+-.pie-chart-title {
+-  font-family: 'Outfit', sans-serif;
+-  font-size: 0.9rem;
+-  font-weight: 600;
+-  color: var(--text-muted);
+-  margin-bottom: 8px;
+-  text-align: center;
+-  width: 100%;
+-  border-bottom: 1px solid var(--border-subtle);
+-  padding-bottom: 8px;
++.git-diff-add {
++  background: rgba(34, 197, 94, 0.1);
++  color: #15803d;
+ }
+ 
+-/* ─────────────────────────────────────────────────────────────────────────────
+-   QUILL CURSORS
+-───────────────────────────────────────────────────────────────────────────── */
+-.ql-cursor.hidden { display: none; }
+-.ql-cursor .ql-cursor-caret-container, .ql-cursor .ql-cursor-flag { position: absolute; }
+-.ql-cursor .ql-cursor-flag {
+-  z-index: 10;
+-  transform: translate3d(-1px, -100%, 0);
+-  opacity: 0;
+-  visibility: hidden;
+-  color: #fff;
+-  padding-bottom: 2px;
+-  border-radius: 0 3px 3px 0;
+-  transition: opacity 0.3s ease, visibility 0.3s ease;
+-  font-family: 'Inter', sans-serif;
+-  font-size: 11px;
+-  font-weight: 600;
++.git-diff-del {
++  background: rgba(239, 68, 68, 0.08);
++  color: #b91c1c;
+ }
+-.ql-cursor .ql-cursor-flag.flag-flipped {
+-  border-radius: 3px 0 0 3px;
+-  transform: translate3d(calc(-100% + 1px), -100%, 0);
++
++.git-diff-symbol {
++  font-weight: 700;
++  flex-shrink: 0;
++  width: 12px;
+ }
+-.ql-cursor .ql-cursor-flag .ql-cursor-name {
+-  margin-left: 5px;
+-  margin-right: 5px;
+-  display: inline-block;
+-  margin-top: -2px;
+-  white-space: nowrap;
++
++.git-diff-text {
++  word-break: break-all;
++  white-space: pre-wrap;
+ }
+-.ql-cursor .ql-cursor-caret-container { cursor: text; margin-left: -9px; padding: 0 9px; }
+-.ql-cursor .ql-cursor-caret-container.hover + .ql-cursor-flag {
+-  opacity: 1; visibility: visible; transition: none;
++
++.git-diff-empty {
++  font-size: 0.78rem;
++  color: var(--text-muted);
++  text-align: center;
++  padding: 14px 12px;
++  margin: 0;
++  font-style: italic;
+ }
+-.ql-cursor .ql-cursor-caret-container.no-pointer { pointer-events: none; }
+-.ql-cursor .ql-cursor-caret-container .ql-cursor-caret {
+-  position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px;
++
++.git-checkout-btn {
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  gap: 7px;
++  width: 100%;
++  padding: 9px 14px;
++  background: transparent;
++  border: none;
++  border-top: 1px solid var(--border-subtle);
++  color: var(--primary);
++  font-size: 0.8rem;
++  font-weight: 600;
++  font-family: 'Inter', sans-serif;
++  cursor: pointer;
++  transition: background 0.15s;
++}
++
++.git-checkout-btn:hover { background: rgba(99, 102, 241, 0.06); }
++
++/* Loading / empty states */
++.git-loading {
++  display: flex;
++  align-items: center;
++  gap: 10px;
++  color: var(--text-muted);
++  font-size: 0.85rem;
++  padding: 20px 0;
++}
++
++.git-empty-state {
++  display: flex;
++  flex-direction: column;
++  align-items: center;
++  gap: 12px;
++  padding: 40px 16px;
++  color: var(--text-muted);
++  text-align: center;
++}
++
++.git-empty-state p {
++  font-size: 0.85rem;
++  margin: 0;
++  line-height: 1.6;
++}
++
++/* Spinner */
++.git-spinner {
++  display: inline-block;
++  width: 14px;
++  height: 14px;
++  border: 2px solid rgba(255, 255, 255, 0.3);
++  border-top-color: white;
++  border-radius: 50%;
++  animation: gitSpin 0.7s linear infinite;
++  flex-shrink: 0;
++}
++
++@keyframes gitSpin { to { transform: rotate(360deg); } }
++
++.git-loading .git-spinner {
++  border-color: rgba(99, 102, 241, 0.2);
++  border-top-color: var(--primary);
++}
++
++/* Dark theme overrides */
++[data-theme='dark'] .git-message-input { background: rgba(15, 23, 42, 0.6); }
++[data-theme='dark'] .git-commit-top:hover { background: rgba(255, 255, 255, 0.04); }
++[data-theme='dark'] .git-diff-add { background: rgba(34, 197, 94, 0.1); color: #4ade80; }
++[data-theme='dark'] .git-diff-del { background: rgba(239, 68, 68, 0.1); color: #f87171; }
++[data-theme='dark'] .git-head-badge { background: rgba(34, 197, 94, 0.15); color: #4ade80; border-color: rgba(34, 197, 94, 0.25); }
++
++/* ── Checkout / Revert action row (inside sidebar diff panel) ─── */
++.git-action-row {
++  display: grid;
++  grid-template-columns: 1fr 1fr;
++  gap: 8px;
++  padding: 10px 12px;
++  border-top: 1px solid var(--border-subtle);
++}
++
++.git-action-btn {
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  gap: 6px;
++  padding: 8px 10px;
++  border-radius: var(--radius-sm);
++  font-size: 0.78rem;
++  font-weight: 600;
++  font-family: 'Inter', sans-serif;
++  cursor: pointer;
++  transition: all 0.15s ease;
++  border: 1px solid transparent;
++}
++
++.git-action-checkout {
++  background: rgba(99, 102, 241, 0.08);
++  color: var(--primary);
++  border-color: rgba(99, 102, 241, 0.2);
++}
++
++.git-action-checkout:hover {
++  background: rgba(99, 102, 241, 0.15);
++  border-color: rgba(99, 102, 241, 0.4);
++  transform: translateY(-1px);
++}
++
++.git-action-revert {
++  background: rgba(239, 68, 68, 0.06);
++  color: #dc2626;
++  border-color: rgba(239, 68, 68, 0.2);
++}
++
++.git-action-revert:hover:not(:disabled) {
++  background: rgba(239, 68, 68, 0.12);
++  border-color: rgba(239, 68, 68, 0.35);
++  transform: translateY(-1px);
++}
++
++.git-action-revert:disabled {
++  opacity: 0.45;
++  cursor: not-allowed;
++}
++
++.git-spinner-sm {
++  display: inline-block;
++  width: 11px;
++  height: 11px;
++  border: 2px solid rgba(220, 38, 38, 0.25);
++  border-top-color: #dc2626;
++  border-radius: 50%;
++  animation: gitSpin 0.7s linear infinite;
++}
++
++/* ─────────────────────────────────────────────────────────────────────────────
++   DIFF OVERLAY MODAL
++───────────────────────────────────────────────────────────────────────────── */
++
++/* Full-area backdrop — sits on top of the editor */
++.diff-overlay-backdrop {
++  position: absolute;
++  inset: 0;
++  background: rgba(15, 23, 42, 0.55);
++  backdrop-filter: blur(3px);
++  -webkit-backdrop-filter: blur(3px);
++  z-index: 100;
++  display: flex;
++  align-items: flex-start;
++  justify-content: center;
++  padding: 24px 20px;
++  animation: diffBackdropIn 0.2s ease forwards;
++}
++
++@keyframes diffBackdropIn {
++  from { opacity: 0; }
++  to   { opacity: 1; }
++}
++
++/* The panel itself */
++.diff-overlay-panel {
++  width: 100%;
++  max-width: 720px;
++  max-height: calc(100% - 48px);
++  background: var(--surface);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-lg);
++  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(99, 102, 241, 0.15);
++  display: flex;
++  flex-direction: column;
++  overflow: hidden;
++  animation: diffPanelIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
++}
++
++@keyframes diffPanelIn {
++  from { opacity: 0; transform: translateY(-12px) scale(0.98); }
++  to   { opacity: 1; transform: translateY(0)   scale(1); }
++}
++
++/* Header */
++.diff-overlay-header {
++  display: flex;
++  align-items: flex-start;
++  justify-content: space-between;
++  padding: 18px 20px 14px;
++  border-bottom: 1px solid var(--border-subtle);
++  flex-shrink: 0;
++}
++
++.diff-overlay-title-row {
++  display: flex;
++  align-items: flex-start;
++  gap: 12px;
++}
++
++.diff-overlay-icon {
++  color: var(--primary);
++  margin-top: 2px;
++  flex-shrink: 0;
++}
++
++.diff-overlay-title {
++  font-family: 'Outfit', sans-serif;
++  font-size: 1rem;
++  font-weight: 700;
++  color: var(--text-main);
++  margin-bottom: 4px;
++}
++
++.diff-overlay-subtitle {
++  display: flex;
++  align-items: center;
++  gap: 10px;
++  flex-wrap: wrap;
++}
++
++.diff-hash {
++  font-family: 'Courier New', monospace;
++  font-size: 0.75rem;
++  font-weight: 600;
++  color: var(--primary);
++  background: rgba(99, 102, 241, 0.08);
++  padding: 1px 7px;
++  border-radius: 4px;
++}
++
++.diff-author {
++  font-size: 0.78rem;
++  color: var(--text-muted);
++}
++
++.diff-time {
++  font-size: 0.75rem;
++  color: var(--text-muted);
++}
++
++.diff-overlay-close {
++  background: var(--surface-raised);
++  border: 1px solid var(--border-subtle);
++  color: var(--text-muted);
++  border-radius: 8px;
++  width: 32px;
++  height: 32px;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  cursor: pointer;
++  transition: all 0.15s;
++  flex-shrink: 0;
++}
++
++.diff-overlay-close:hover {
++  background: #fee2e2;
++  color: #ef4444;
++  border-color: #fca5a5;
++}
++
++/* Commit message */
++.diff-overlay-commit-msg {
++  padding: 10px 20px;
++  font-size: 0.88rem;
++  font-weight: 600;
++  color: var(--text-main);
++  font-style: italic;
++  border-bottom: 1px solid var(--border-subtle);
++  background: var(--surface-raised);
++  flex-shrink: 0;
++}
++
++/* Stats bar */
++.diff-stats-bar {
++  display: flex;
++  align-items: center;
++  gap: 16px;
++  padding: 8px 20px;
++  border-bottom: 1px solid var(--border-subtle);
++  flex-shrink: 0;
++  font-size: 0.78rem;
++  font-weight: 600;
++}
++
++.diff-stat-add {
++  display: flex;
++  align-items: center;
++  gap: 4px;
++  color: #16a34a;
++}
++
++.diff-stat-del {
++  display: flex;
++  align-items: center;
++  gap: 4px;
++  color: #dc2626;
++}
++
++.diff-stat-eq {
++  color: var(--text-muted);
++  font-weight: 500;
++}
++
++/* Scrollable diff body */
++.diff-overlay-body {
++  flex: 1;
++  overflow-y: auto;
++  min-height: 0;
++}
++
++.diff-overlay-body::-webkit-scrollbar { width: 6px; }
++.diff-overlay-body::-webkit-scrollbar-track { background: transparent; }
++.diff-overlay-body::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 99px; }
++
++/* Code diff block */
++.diff-code-block {
++  font-family: 'Courier New', monospace;
++  font-size: 0.825rem;
++  line-height: 1.65;
++}
++
++.diff-code-line {
++  display: flex;
++  align-items: baseline;
++  gap: 12px;
++  padding: 1px 20px;
++  transition: filter 0.1s;
++}
++
++.diff-code-add {
++  background: rgba(34, 197, 94, 0.09);
++  color: #166534;
++}
++
++.diff-code-del {
++  background: rgba(239, 68, 68, 0.07);
++  color: #991b1b;
++}
++
++.diff-code-eq {
++  color: var(--text-muted);
++}
++
++.diff-code-gutter {
++  width: 14px;
++  flex-shrink: 0;
++  font-weight: 700;
++  user-select: none;
++  opacity: 0.8;
++}
++
++.diff-code-text {
++  white-space: pre-wrap;
++  word-break: break-all;
++  flex: 1;
++}
++
++/* Empty state */
++.diff-overlay-no-diff {
++  display: flex;
++  flex-direction: column;
++  align-items: center;
++  gap: 14px;
++  padding: 48px 24px;
++  color: var(--text-muted);
++  text-align: center;
++}
++
++.diff-overlay-no-diff p {
++  font-size: 0.88rem;
++  margin: 0;
++  line-height: 1.6;
++}
++
++/* Footer action bar */
++.diff-overlay-footer {
++  display: flex;
++  align-items: center;
++  justify-content: flex-end;
++  gap: 12px;
++  padding: 14px 20px;
++  border-top: 1px solid var(--border-subtle);
++  background: var(--surface-raised);
++  flex-shrink: 0;
++}
++
++.diff-btn-cancel {
++  display: flex;
++  align-items: center;
++  gap: 7px;
++  padding: 9px 18px;
++  background: var(--surface);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-sm);
++  color: var(--text-muted);
++  font-size: 0.875rem;
++  font-weight: 600;
++  font-family: 'Inter', sans-serif;
++  cursor: pointer;
++  transition: all 0.15s;
++}
++
++.diff-btn-cancel:hover {
++  background: var(--surface-raised);
++  border-color: #94a3b8;
++  color: var(--text-main);
++}
++
++.diff-btn-apply {
++  display: flex;
++  align-items: center;
++  gap: 7px;
++  padding: 9px 20px;
++  background: var(--accent-gradient);
++  border: none;
++  border-radius: var(--radius-sm);
++  color: white;
++  font-size: 0.875rem;
++  font-weight: 600;
++  font-family: 'Inter', sans-serif;
++  cursor: pointer;
++  transition: all 0.2s;
++}
++
++.diff-btn-apply:hover {
++  transform: translateY(-1px);
++  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
++}
++
++.diff-btn-apply:active { transform: translateY(0); }
++
++/* Dark mode overrides */
++[data-theme='dark'] .diff-overlay-panel {
++  background: rgba(15, 23, 42, 0.95);
++  border-color: rgba(255, 255, 255, 0.1);
++}
++[data-theme='dark'] .diff-code-add { background: rgba(34, 197, 94, 0.12); color: #4ade80; }
++[data-theme='dark'] .diff-code-del { background: rgba(239, 68, 68, 0.12); color: #f87171; }
++[data-theme='dark'] .diff-code-eq  { color: rgba(148, 163, 184, 0.6); }
++[data-theme='dark'] .diff-stat-add { color: #4ade80; }
++[data-theme='dark'] .diff-stat-del { color: #f87171; }
++[data-theme='dark'] .diff-overlay-close:hover { background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); }
++[data-theme='dark'] .git-action-revert { color: #f87171; border-color: rgba(239, 68, 68, 0.25); }
++[data-theme='dark'] .git-action-revert:hover:not(:disabled) { background: rgba(239, 68, 68, 0.15); }
++
++/* ── Draft recovery banner ─────────────────────────────────────── */
++.draft-recovery-banner {
++  background: #fffbeb;
++  border: 1px solid #f59e0b;
++  border-radius: var(--radius-sm);
++  padding: 12px 14px;
++  margin-bottom: 16px;
++  flex-shrink: 0;
++  animation: gitFadeIn 0.25s ease forwards;
++}
++
++.draft-banner-top {
++  display: flex;
++  align-items: flex-start;
++  gap: 10px;
++  margin-bottom: 10px;
++}
++
++.draft-banner-icon {
++  color: #d97706;
++  flex-shrink: 0;
++  margin-top: 1px;
++}
++
++.draft-banner-text {
++  display: flex;
++  flex-direction: column;
++  gap: 2px;
++}
++
++.draft-banner-text strong {
++  font-size: 0.82rem;
++  font-weight: 700;
++  color: #92400e;
++}
++
++.draft-banner-text span {
++  font-size: 0.75rem;
++  color: #b45309;
++}
++
++.draft-banner-actions {
++  display: grid;
++  grid-template-columns: 1fr 1fr;
++  gap: 8px;
++}
++
++.draft-btn-restore {
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  gap: 5px;
++  padding: 7px 10px;
++  background: #d97706;
++  color: white;
++  border: none;
++  border-radius: var(--radius-sm);
++  font-size: 0.78rem;
++  font-weight: 700;
++  font-family: 'Inter', sans-serif;
++  cursor: pointer;
++  transition: all 0.15s;
++}
++
++.draft-btn-restore:hover {
++  background: #b45309;
++  transform: translateY(-1px);
++}
++
++.draft-btn-discard {
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  gap: 5px;
++  padding: 7px 10px;
++  background: transparent;
++  color: #92400e;
++  border: 1px solid #f59e0b;
++  border-radius: var(--radius-sm);
++  font-size: 0.78rem;
++  font-weight: 600;
++  font-family: 'Inter', sans-serif;
++  cursor: pointer;
++  transition: all 0.15s;
++}
++
++.draft-btn-discard:hover {
++  background: rgba(245, 158, 11, 0.1);
++}
++
++/* Dark mode draft banner */
++[data-theme='dark'] .draft-recovery-banner {
++  background: rgba(120, 53, 15, 0.2);
++  border-color: rgba(245, 158, 11, 0.4);
++}
++[data-theme='dark'] .draft-banner-text strong { color: #fcd34d; }
++[data-theme='dark'] .draft-banner-text span   { color: #fbbf24; }
++[data-theme='dark'] .draft-btn-discard { color: #fbbf24; border-color: rgba(245, 158, 11, 0.35); }
++[data-theme='dark'] .draft-btn-discard:hover { background: rgba(245, 158, 11, 0.1); }
++
++/* ── Reset to here button & confirmation ───────────────────────── */
++.git-reset-btn {
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  gap: 6px;
++  width: calc(100% - 24px);
++  margin: 0 12px 10px;
++  padding: 7px 10px;
++  background: transparent;
++  color: var(--text-muted);
++  border: 1px dashed var(--border-subtle);
++  border-radius: var(--radius-sm);
++  font-size: 0.75rem;
++  font-weight: 600;
++  font-family: 'Inter', sans-serif;
++  cursor: pointer;
++  transition: all 0.15s ease;
++}
++
++.git-reset-btn:hover:not(:disabled) {
++  background: rgba(239, 68, 68, 0.05);
++  border-color: rgba(239, 68, 68, 0.35);
++  color: #dc2626;
++  border-style: solid;
++}
++
++.git-reset-btn:disabled {
++  opacity: 0.4;
++  cursor: not-allowed;
++}
++
++/* Inline confirmation box */
++.git-reset-confirm {
++  margin: 0 12px 10px;
++  padding: 10px 12px;
++  background: rgba(239, 68, 68, 0.06);
++  border: 1px solid rgba(239, 68, 68, 0.25);
++  border-radius: var(--radius-sm);
++  animation: gitFadeIn 0.2s ease forwards;
++}
++
++.git-reset-confirm-text {
++  display: flex;
++  align-items: flex-start;
++  gap: 7px;
++  font-size: 0.78rem;
++  color: #b91c1c;
++  line-height: 1.4;
++  margin-bottom: 10px;
++}
++
++.git-reset-confirm-text svg {
++  flex-shrink: 0;
++  margin-top: 1px;
++  color: #dc2626;
++}
++
++.git-reset-confirm-text strong {
++  font-weight: 700;
++}
++
++.git-reset-confirm-actions {
++  display: grid;
++  grid-template-columns: 1fr 1fr;
++  gap: 8px;
++}
++
++.git-reset-confirm-yes {
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  gap: 5px;
++  padding: 7px 10px;
++  background: #dc2626;
++  color: white;
++  border: none;
++  border-radius: var(--radius-sm);
++  font-size: 0.78rem;
++  font-weight: 700;
++  font-family: 'Inter', sans-serif;
++  cursor: pointer;
++  transition: all 0.15s;
++}
++
++.git-reset-confirm-yes:hover:not(:disabled) {
++  background: #b91c1c;
++  transform: translateY(-1px);
++}
++
++.git-reset-confirm-yes:disabled {
++  opacity: 0.5;
++  cursor: not-allowed;
++}
++
++.git-reset-confirm-no {
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  gap: 5px;
++  padding: 7px 10px;
++  background: transparent;
++  color: #b91c1c;
++  border: 1px solid rgba(239, 68, 68, 0.3);
++  border-radius: var(--radius-sm);
++  font-size: 0.78rem;
++  font-weight: 600;
++  font-family: 'Inter', sans-serif;
++  cursor: pointer;
++  transition: all 0.15s;
++}
++
++.git-reset-confirm-no:hover:not(:disabled) {
++  background: rgba(239, 68, 68, 0.08);
++}
++
++.git-reset-confirm-no:disabled {
++  opacity: 0.5;
++  cursor: not-allowed;
++}
++
++/* Dark mode overrides */
++[data-theme='dark'] .git-reset-btn:hover:not(:disabled) {
++  background: rgba(239, 68, 68, 0.08);
++  color: #f87171;
++}
++
++[data-theme='dark'] .git-reset-confirm {
++  background: rgba(239, 68, 68, 0.08);
++  border-color: rgba(239, 68, 68, 0.2);
++}
++
++[data-theme='dark'] .git-reset-confirm-text { color: #f87171; }
++[data-theme='dark'] .git-reset-confirm-no   { color: #f87171; border-color: rgba(239, 68, 68, 0.25); }
++
++/* ── Dashboard card enhancements ───────────────────────────────── */
++.ws-card-preview {
++  font-size: 0.78rem;
++  color: var(--text-muted);
++  line-height: 1.5;
++  margin: 6px 0 4px;
++  display: -webkit-box;
++  -webkit-line-clamp: 2;
++  -webkit-box-orient: vertical;
++  overflow: hidden;
++  opacity: 0.8;
++}
++
++.ws-card-last-commit {
++  display: flex;
++  align-items: center;
++  gap: 5px;
++  font-size: 0.72rem;
++  color: var(--primary);
++  font-family: 'Inter', sans-serif;
++  font-style: italic;
++  margin-bottom: 6px;
++  opacity: 0.8;
++  white-space: nowrap;
++  overflow: hidden;
++  text-overflow: ellipsis;
++}
++
++.ws-card-online-label {
++  font-size: 0.72rem;
++  color: #16a34a;
++  font-weight: 600;
++  margin-left: 4px;
++}
++
++.ws-doc-count {
++  font-size: 0.8rem;
++  color: var(--text-muted);
++  background: var(--surface-raised);
++  border: 1px solid var(--border-subtle);
++  border-radius: 20px;
++  padding: 2px 10px;
++  font-weight: 600;
++}
++
++.ws-card-deleting {
++  opacity: 0.5;
++  pointer-events: none;
++  transition: opacity 0.2s;
++}
++
++/* ── Editor header online badge ────────────────────────────────── */
++.editor-online-badge {
++  display: flex;
++  align-items: center;
++  gap: 6px;
++  font-size: 0.75rem;
++  font-weight: 600;
++  color: #16a34a;
++  background: rgba(22, 163, 74, 0.08);
++  border: 1px solid rgba(22, 163, 74, 0.2);
++  padding: 3px 10px;
++  border-radius: 20px;
++  font-family: 'Inter', sans-serif;
++}
++
++.editor-online-dot {
++  width: 7px;
++  height: 7px;
++  border-radius: 50%;
++  background: #16a34a;
++  animation: editorPulse 2s ease-in-out infinite;
++  flex-shrink: 0;
++}
++
++@keyframes editorPulse {
++  0%, 100% { opacity: 1; transform: scale(1); }
++  50%       { opacity: 0.5; transform: scale(0.85); }
++}
++
++/* ── Reset toast banner (inside sidebar) ───────────────────────── */
++.git-reset-toast {
++  display: flex;
++  align-items: flex-start;
++  gap: 8px;
++  background: rgba(99, 102, 241, 0.07);
++  border: 1px solid rgba(99, 102, 241, 0.2);
++  border-radius: var(--radius-sm);
++  padding: 10px 14px;
++  margin-bottom: 12px;
++  font-size: 0.78rem;
++  color: var(--primary);
++  line-height: 1.5;
++  animation: gitFadeIn 0.25s ease forwards;
++  flex-shrink: 0;
+ }
+-.ql-cursor .ql-cursor-selection-block { position: absolute; pointer-events: none; }
+ 
++.git-reset-toast svg { flex-shrink: 0; margin-top: 1px; }
+ 
++/* Dark mode overrides */
++[data-theme='dark'] .ws-card-online-label { color: #4ade80; }
++[data-theme='dark'] .editor-online-badge  { color: #4ade80; background: rgba(74, 222, 128, 0.08); border-color: rgba(74, 222, 128, 0.2); }
++[data-theme='dark'] .editor-online-dot    { background: #4ade80; }
++[data-theme='dark'] .git-reset-toast      { background: rgba(99, 102, 241, 0.1); border-color: rgba(99, 102, 241, 0.25); }
+diff --git a/E:/Docu-Sync/src/pages/Dashboard.tsx b/D:/Projects/Docu-Sync/src/pages/Dashboard.tsx
+index fc9af05..9c50b26 100644
+--- a/E:/Docu-Sync/src/pages/Dashboard.tsx
++++ b/D:/Projects/Docu-Sync/src/pages/Dashboard.tsx
+@@ -1,12 +1,11 @@
+ import React, { useState, useEffect, useContext } from 'react';
+ import { useNavigate } from 'react-router-dom';
+-import { signInWithGoogle, registerWithEmail, loginWithEmail, logout, auth, db } from '../utils/firebase';
++import { signInWithGoogle, registerWithEmail, loginWithEmail, logout, auth, db, createRoom, deleteRoomAndSnapshots } from '../utils/firebase';
+ import type { WorkspaceRoom } from '../utils/firebase';
+ import { onAuthStateChanged } from 'firebase/auth';
+-import { collection, query, where, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
+-import { createRoomConfig } from '../utils/firebase';
++import { collection, query, where, onSnapshot } from 'firebase/firestore';
+ import type { User } from 'firebase/auth';
+-import { PenTool, LogIn, LogOut, Plus, ArrowRight, Mail, Trash2, FileText, Clock, LayoutGrid, Sun, Moon, Code, Terminal } from 'lucide-react';
++import { PenTool, LogIn, LogOut, Plus, ArrowRight, Mail, Trash2, FileText, Clock, LayoutGrid, Sun, Moon, GitCommit } from 'lucide-react';
+ import { ThemeContext } from '../App';
+ 
+ export const Dashboard: React.FC = () => {
+@@ -26,9 +25,9 @@ export const Dashboard: React.FC = () => {
+     const [myRooms, setMyRooms] = useState<WorkspaceRoom[]>([]);
+     const [joinId, setJoinId] = useState('');
+     const [customRoomName, setCustomRoomName] = useState('');
+-    const [codeRoomName, setCodeRoomName] = useState('');
+-    const [codeLanguage, setCodeLanguage] = useState('javascript');
+     const [now, setNow] = useState(Date.now());
++    const [activeNav, setActiveNav] = useState<'dashboard' | 'recent'>('dashboard');
++    const [deletingId, setDeletingId] = useState<string | null>(null);
+ 
+     useEffect(() => {
+         const timer = setInterval(() => setNow(Date.now()), 10000);
+@@ -47,35 +46,30 @@ export const Dashboard: React.FC = () => {
+         const unsubscribe = onSnapshot(q, (snapshot) => {
+             const rooms: WorkspaceRoom[] = snapshot.docs.map(d => ({
+                 roomId: d.data().roomId,
++                name: d.data().name || d.data().roomId,
+                 createdAt: d.data().createdAt,
+                 members: d.data().members || [],
+                 activeParticipants: d.data().activeParticipants || [],
+-                type: d.data().type,
+-                language: d.data().language
++                lastPreview: d.data().lastPreview || '',
++                lastCommit: d.data().lastCommit || '',
+             }));
+             setMyRooms(rooms.sort((a, b) => b.createdAt - a.createdAt));
+         }, (err) => console.error('Presence Query Error:', err));
+         return () => unsubscribe();
+     }, [user]);
+ 
+-    const handleCreateText = async (e: React.FormEvent) => {
++    const handleCreate = async (e: React.FormEvent) => {
+         e.preventDefault();
+         const trimmed = customRoomName.trim();
+-        if (!trimmed) return;
+-        await createRoomConfig(trimmed, 'text');
+-        navigate(`/room/${trimmed}`);
+-    };
+-
+-    const handleCreateCode = async (e: React.FormEvent) => {
+-        e.preventDefault();
+-        const trimmed = codeRoomName.trim();
+-        if (!trimmed) return;
+-        await createRoomConfig(trimmed, 'code', codeLanguage);
+-        navigate(`/room/${trimmed}`);
++        const targetId = trimmed || Math.random().toString(36).substring(2, 12);
++        // Persist the room + friendly name immediately (before entering)
++        if (user) await createRoom(targetId, trimmed || targetId, user);
++        setCustomRoomName('');
++        navigate(`/room/${targetId}`);
+     };
+ 
+     const handleRoomNameInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+-        setCustomRoomName(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''));
++        setCustomRoomName(e.target.value.replace(/[^a-zA-Z0-9_\- ]/g, ''));
+     };
+ 
+     const handleJoin = (e: React.FormEvent) => {
+@@ -85,9 +79,13 @@ export const Dashboard: React.FC = () => {
+ 
+     const handleDelete = async (e: React.MouseEvent, roomId: string) => {
+         e.stopPropagation();
+-        if (!db) return;
+-        try { await deleteDoc(doc(db, 'rooms', roomId)); }
+-        catch (err) { console.error('Delete failed:', err); }
++        setDeletingId(roomId);
++        try {
++            await deleteRoomAndSnapshots(roomId);
++        } catch (err) {
++            console.error('Delete failed:', err);
++        }
++        setDeletingId(null);
+     };
+ 
+     const handleAuth = async (e: React.FormEvent) => {
+@@ -111,6 +109,11 @@ export const Dashboard: React.FC = () => {
+     const activeCount = (room: WorkspaceRoom) =>
+         room.activeParticipants?.filter(p => now - p.lastActive < 35000) || [];
+ 
++    // Displayed rooms depend on active nav tab
++    const displayedRooms = activeNav === 'recent'
++        ? [...myRooms].sort((a, b) => b.createdAt - a.createdAt).slice(0, 10)
++        : myRooms;
++
+     // ─── AUTH PAGE ────────────────────────────────────────────────────────────
+     if (!user) {
+         return (
+@@ -178,17 +181,43 @@ export const Dashboard: React.FC = () => {
+ 
+                     <div className="ws-nav-list">
+                         <div className="ws-rail-label" style={{ marginBottom: '8px' }}>Main Menu</div>
+-                        <div className="ws-nav-item active">
++                        <div
++                            className={`ws-nav-item ${activeNav === 'dashboard' ? 'active' : ''}`}
++                            onClick={() => setActiveNav('dashboard')}
++                            role="button"
++                        >
+                             <LayoutGrid size={16} /> <span>Dashboard</span>
+                         </div>
+-                        <div className="ws-nav-item">
++                        <div
++                            className={`ws-nav-item ${activeNav === 'recent' ? 'active' : ''}`}
++                            onClick={() => setActiveNav('recent')}
++                            role="button"
++                        >
+                             <FileText size={16} /> <span>Recent Docs</span>
+                         </div>
+                     </div>
+ 
+-
++                    <div className="ws-rail-section" style={{ marginTop: '24px' }}>
++                        <div className="ws-rail-label" style={{ marginBottom: '8px' }}>Start Collaborating</div>
++                        <form onSubmit={handleCreate}>
++                            <input
++                                className="ws-input"
++                                type="text"
++                                placeholder="Document name…"
++                                value={customRoomName}
++                                onChange={handleRoomNameInput}
++                            />
++                            <p className="ws-input-hint" style={{ marginTop: '6px', marginBottom: '10px' }}>
++                                Letters, numbers, spaces, hyphens.
++                            </p>
++                            <button type="submit" className="ws-btn-create">
++                                <Plus size={15} /> New document
++                            </button>
++                        </form>
++                    </div>
+ 
+                     <div className="ws-rail-section" style={{ marginTop: '24px' }}>
++                        <div className="ws-rail-label" style={{ marginBottom: '8px' }}>Join by ID</div>
+                         <form onSubmit={handleJoin} style={{ display: 'flex', gap: '8px' }}>
+                             <input
+                                 className="ws-input"
+@@ -230,80 +259,21 @@ export const Dashboard: React.FC = () => {
+                 {/* Main Content Area */}
+                 <main className="ws-main" style={{ display: 'flex', flexDirection: 'column' }}>
+                     <div className="ws-main-top">
+-                        <span>Workspace</span> <span style={{ padding: '0 4px', color: '#cbd5e1' }}>/</span> <span className="ws-main-top-active">Dashboard</span>
+-                    </div>
+-
+-                    <div className="ws-main-header" style={{ marginBottom: '24px' }}>
+-                        <h1 className="ws-main-title">Start a new project</h1>
+-                    </div>
+-
+-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '40px' }}>
+-                        {/* Text Editor Creation Card */}
+-                        <div style={{ background: 'var(--surface-base)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px' }}>
+-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+-                                <div style={{ background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', padding: '8px', borderRadius: '8px' }}>
+-                                    <FileText size={20} />
+-                                </div>
+-                                <h2 style={{ fontSize: '1.1rem', margin: 0, color: 'var(--text-main)', fontWeight: 600 }}>Text Document</h2>
+-                            </div>
+-                            <form onSubmit={handleCreateText} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+-                                <input
+-                                    className="ws-input"
+-                                    type="text"
+-                                    placeholder="Enter document ID (required)"
+-                                    value={customRoomName}
+-                                    onChange={handleRoomNameInput}
+-                                    required
+-                                />
+-                                <button type="submit" className="ws-btn-create" style={{ display: 'flex', justifyContent: 'center', opacity: customRoomName.trim() ? 1 : 0.6, cursor: customRoomName.trim() ? 'pointer' : 'not-allowed' }} disabled={!customRoomName.trim()}>
+-                                    <Plus size={16} /> Create Document
+-                                </button>
+-                            </form>
+-                        </div>
+-
+-                        {/* Code Editor Creation Card */}
+-                        <div style={{ background: 'var(--surface-base)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px' }}>
+-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+-                                <div style={{ background: 'rgba(168, 85, 247, 0.1)', color: '#a855f7', padding: '8px', borderRadius: '8px' }}>
+-                                    <Code size={20} />
+-                                </div>
+-                                <h2 style={{ fontSize: '1.1rem', margin: 0, color: 'var(--text-main)', fontWeight: 600 }}>Code Project</h2>
+-                            </div>
+-                            <form onSubmit={handleCreateCode} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+-                                <div style={{ display: 'flex', gap: '8px' }}>
+-                                    <input
+-                                        className="ws-input"
+-                                        style={{ flex: 1, marginBottom: 0 }}
+-                                        type="text"
+-                                        placeholder="Enter project ID (required)"
+-                                        value={codeRoomName}
+-                                        onChange={e => setCodeRoomName(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+-                                        required
+-                                    />
+-                                    <select 
+-                                      className="ws-input" 
+-                                      style={{ width: '110px', marginBottom: 0 }}
+-                                      value={codeLanguage}
+-                                      onChange={e => setCodeLanguage(e.target.value)}
+-                                    >
+-                                        <option value="javascript">JavaScript</option>
+-                                        <option value="python">Python</option>
+-                                        <option value="java">Java</option>
+-                                        <option value="c++">C++</option>
+-                                    </select>
+-                                </div>
+-                                <button type="submit" className="ws-btn-create" style={{ display: 'flex', justifyContent: 'center', background: '#a855f7', color: '#fff', opacity: codeRoomName.trim() ? 1 : 0.6, cursor: codeRoomName.trim() ? 'pointer' : 'not-allowed' }} disabled={!codeRoomName.trim()}>
+-                                    <Terminal size={16} /> Create Code Project
+-                                </button>
+-                            </form>
+-                        </div>
++                        <span>Workspace</span>
++                        <span style={{ padding: '0 4px', color: '#cbd5e1' }}>/</span>
++                        <span className="ws-main-top-active">
++                            {activeNav === 'dashboard' ? 'Dashboard' : 'Recent Docs'}
++                        </span>
+                     </div>
+ 
+                     <div className="ws-main-header">
+-                        <h1 className="ws-main-title">Recent Workspaces</h1>
++                        <h1 className="ws-main-title">
++                            {activeNav === 'dashboard' ? 'Your documents' : 'Recent documents'}
++                        </h1>
++                        <span className="ws-doc-count">{myRooms.length} doc{myRooms.length !== 1 ? 's' : ''}</span>
+                     </div>
+ 
+-                    {myRooms.length === 0 ? (
++                    {displayedRooms.length === 0 ? (
+                         <div className="ws-empty" style={{ flex: 1 }}>
+                             <FileText size={48} strokeWidth={1} />
+                             <p>No documents yet.</p>
+@@ -311,28 +281,47 @@ export const Dashboard: React.FC = () => {
+                         </div>
+                     ) : (
+                         <div className="ws-grid">
+-                            {myRooms.map(room => {
++                            {displayedRooms.map(room => {
+                                 const online = activeCount(room);
++                                const isDeleting = deletingId === room.roomId;
+                                 return (
+                                     <div
+                                         key={room.roomId}
+-                                        className="ws-card"
+-                                        onClick={() => navigate(`/room/${room.roomId}`)}
++                                        className={`ws-card ${isDeleting ? 'ws-card-deleting' : ''}`}
++                                        onClick={() => !isDeleting && navigate(`/room/${room.roomId}`)}
+                                     >
+                                         <div className="ws-card-top">
+-                                            <div className="ws-card-icon" style={{ color: room.type === 'code' ? '#a855f7' : '#cbd5e1' }}>
+-                                                {room.type === 'code' ? <Code size={18} strokeWidth={2} /> : <FileText size={18} strokeWidth={2} />}
+-                                            </div>
++                                            <div className="ws-card-icon"><FileText size={18} strokeWidth={2} /></div>
+                                             <button
+                                                 className="ws-card-delete"
+                                                 onClick={e => handleDelete(e, room.roomId)}
+-                                                title="Delete room"
++                                                title="Delete document and all its history"
++                                                disabled={isDeleting}
+                                             >
+-                                                <Trash2 size={13} />
++                                                {isDeleting
++                                                    ? <span style={{ width: 13, height: 13, border: '2px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
++                                                    : <Trash2 size={13} />
++                                                }
+                                             </button>
+                                         </div>
+ 
+-                                        <div className="ws-card-name" style={{ marginTop: '4px' }}>{room.roomId}</div>
++                                        {/* Room friendly name */}
++                                        <div className="ws-card-name" style={{ marginTop: '4px' }}>
++                                            {room.name && room.name !== room.roomId ? room.name : room.roomId}
++                                        </div>
++
++                                        {/* Last commit preview */}
++                                        {room.lastPreview && (
++                                            <div className="ws-card-preview">{room.lastPreview}</div>
++                                        )}
++
++                                        {/* Last commit message */}
++                                        {room.lastCommit && (
++                                            <div className="ws-card-last-commit">
++                                                <GitCommit size={11} />
++                                                {room.lastCommit}
++                                            </div>
++                                        )}
+ 
+                                         <div className="ws-card-footer">
+                                             <span className="ws-card-date">
+@@ -355,6 +344,7 @@ export const Dashboard: React.FC = () => {
+                                                             <div className="ws-card-avatar ws-card-avatar-more">+{online.length - 3}</div>
+                                                         )}
+                                                     </div>
++                                                    <span className="ws-card-online-label">{online.length} online</span>
+                                                 </div>
+                                             )}
+                                         </div>
+diff --git a/E:/Docu-Sync/src/pages/EditorRoom.tsx b/D:/Projects/Docu-Sync/src/pages/EditorRoom.tsx
+index da785f0..92dd2f1 100644
+--- a/E:/Docu-Sync/src/pages/EditorRoom.tsx
++++ b/D:/Projects/Docu-Sync/src/pages/EditorRoom.tsx
+@@ -2,12 +2,15 @@ import React, { useEffect, useState } from 'react';
+ import { useParams, useNavigate } from 'react-router-dom';
+ import { Layout } from '../components/Layout';
+ import { Editor } from '../components/Editor';
+-import { CodeEditor } from '../components/CodeEditor';
+ import { VersionHistory } from '../components/VersionHistory';
++import { DiffOverlay } from '../components/DiffOverlay';
+ import { useYjsProvider } from '../hooks/useYjsProvider';
+-import { auth, trackRoomEntry, trackRoomExit, getRoomConfig } from '../utils/firebase';
++import { auth, trackRoomEntry, trackRoomExit } from '../utils/firebase';
++import { applySnapshotToDoc } from '../utils/diff';
++import { clearDraft } from '../utils/draft';
+ import { onAuthStateChanged } from 'firebase/auth';
+ import type { User } from 'firebase/auth';
++import type { DocumentSnapshot } from '../utils/firebase';
+ 
+ export const EditorRoom: React.FC = () => {
+   const { roomId } = useParams<{ roomId: string }>();
+@@ -16,13 +19,11 @@ export const EditorRoom: React.FC = () => {
+   // Reactive auth state — never read currentUser directly in render
+   const [user, setUser] = useState<User | null>(auth?.currentUser || null);
+   const [authChecked, setAuthChecked] = useState(false);
+-  const [roomConfig, setRoomConfig] = useState<{ type: 'text'|'code', language?: string } | null>(null);
+ 
+-  useEffect(() => {
+-    if (roomId) {
+-      getRoomConfig(roomId).then(setRoomConfig);
+-    }
+-  }, [roomId]);
++  // Checkout diff preview
++  const [checkoutTarget, setCheckoutTarget] = useState<DocumentSnapshot | null>(null);
++  // Live Awareness-based user count (most accurate, zero latency)
++  const [onlineCount, setOnlineCount] = useState(1);
+ 
+   useEffect(() => {
+     if (!auth) { setAuthChecked(true); return; }
+@@ -40,6 +41,20 @@ export const EditorRoom: React.FC = () => {
+     undefined
+   );
+ 
++  // Live online count from Yjs awareness
++  useEffect(() => {
++    if (!awareness) return;
++    const update = () => {
++      const states = Array.from(awareness.getStates().values());
++      const allUsers = states.filter((s: any) => s.user).map((s: any) => s.user);
++      const uniqueUsers = Array.from(new Map(allUsers.map(u => [u.name, u])).values());
++      setOnlineCount(uniqueUsers.length || 1);
++    };
++    update();
++    awareness.on('change', update);
++    return () => awareness.off('change', update);
++  }, [awareness]);
++
+   // Heartbeat presence tracking
+   useEffect(() => {
+     if (!user || !roomId) return;
+@@ -83,7 +98,7 @@ export const EditorRoom: React.FC = () => {
+     return null;
+   }
+ 
+-  if (!ydoc || !awareness || !roomConfig) {
++  if (!ydoc || !awareness) {
+     return (
+       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-main)', color: 'white' }}>
+         <div style={{ textAlign: 'center' }}>
+@@ -94,13 +109,35 @@ export const EditorRoom: React.FC = () => {
+     );
+   }
+ 
++  const handleCheckoutPreview = (snapshot: DocumentSnapshot) => {
++    setCheckoutTarget(snapshot);
++  };
++
++  const handleApplyCheckout = () => {
++    if (!checkoutTarget || !ydoc) return;
++    applySnapshotToDoc(ydoc, checkoutTarget.updateData);
++    clearDraft(roomId!);  // checkout replaces working tree — wipe draft
++    setCheckoutTarget(null);
++  };
++
+   return (
+-    <Layout sidebar={<VersionHistory ydoc={ydoc} roomId={roomId} />} awareness={awareness} ydoc={ydoc}>
++    <Layout
++      sidebar={
++        <VersionHistory
++          ydoc={ydoc}
++          roomId={roomId}
++          user={user}
++          onCheckoutPreview={handleCheckoutPreview}
++        />
++      }
++      awareness={awareness}
++    >
+       <div style={{
+         display: 'flex',
+         flexDirection: 'column',
+         height: '100%',
+         background: 'var(--bg-main)',
++        position: 'relative',
+       }}>
+         {/* Editor title bar */}
+         <div style={{
+@@ -115,24 +152,38 @@ export const EditorRoom: React.FC = () => {
+           <div style={{ fontWeight: 600, fontFamily: "'Outfit', sans-serif", fontSize: '0.95rem', color: 'var(--text-main)' }}>
+             Document Editor
+           </div>
+-          <div style={{
+-            fontSize: '0.75rem',
+-            color: 'var(--text-muted)',
+-            fontFamily: 'monospace',
+-            background: 'var(--surface-base)',
+-            padding: '3px 10px',
+-            borderRadius: '20px',
+-            border: '1px solid var(--border-subtle)',
+-          }}>
+-            {roomId}
++          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
++            {/* Live online badge */}
++            <div className="editor-online-badge">
++              <span className="editor-online-dot" />
++              {onlineCount} online
++            </div>
++            <div style={{
++              fontSize: '0.75rem',
++              color: 'var(--text-muted)',
++              fontFamily: 'monospace',
++              background: 'var(--surface-base)',
++              padding: '3px 10px',
++              borderRadius: '20px',
++              border: '1px solid var(--border-subtle)',
++            }}>
++              {roomId}
++            </div>
+           </div>
+         </div>
++
+         {/* Editor fills remaining height */}
+         <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+-          {roomConfig.type === 'code' ? (
+-            <CodeEditor ydoc={ydoc} awareness={awareness} language={roomConfig.language || 'javascript'} />
+-          ) : (
+-            <Editor ydoc={ydoc} awareness={awareness} />
++          <Editor ydoc={ydoc} awareness={awareness} />
++
++          {/* Diff checkout overlay — renders on top of the editor */}
++          {checkoutTarget && (
++            <DiffOverlay
++              snapshot={checkoutTarget}
++              currentText={ydoc.getText('quill').toString()}
++              onApply={handleApplyCheckout}
++              onCancel={() => setCheckoutTarget(null)}
++            />
+           )}
+         </div>
+       </div>
+diff --git a/D:/Projects/Docu-Sync/src/utils/diff.ts b/D:/Projects/Docu-Sync/src/utils/diff.ts
+new file mode 100644
+index 0000000..134770b
+--- /dev/null
++++ b/D:/Projects/Docu-Sync/src/utils/diff.ts
+@@ -0,0 +1,62 @@
++import * as Y from 'yjs';
++import type { DocumentSnapshot } from './firebase';
++
++export type DiffLine = { type: 'add' | 'del' | 'eq'; line: string };
++
++export function getYDocText(updateDataB64: string): string {
++  try {
++    const binary = atob(updateDataB64);
++    const blob = new Uint8Array(binary.length);
++    for (let i = 0; i < binary.length; i++) blob[i] = binary.charCodeAt(i);
++    const tmp = new Y.Doc();
++    Y.applyUpdate(tmp, blob);
++    return tmp.getText('quill').toString();
++  } catch {
++    return '';
++  }
++}
++
++export function computeLineDiff(oldText: string, newText: string): DiffLine[] {
++  const oldLines = oldText.split('\n');
++  const newLines = newText.split('\n');
++  const m = oldLines.length;
++  const n = newLines.length;
++
++  // LCS DP table
++  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
++  for (let i = m - 1; i >= 0; i--)
++    for (let j = n - 1; j >= 0; j--)
++      dp[i][j] = oldLines[i] === newLines[j]
++        ? dp[i + 1][j + 1] + 1
++        : Math.max(dp[i + 1][j], dp[i][j + 1]);
++
++  const result: DiffLine[] = [];
++  let i = 0, j = 0;
++  while (i < m || j < n) {
++    if (i < m && j < n && oldLines[i] === newLines[j]) {
++      result.push({ type: 'eq', line: oldLines[i] }); i++; j++;
++    } else if (j < n && (i >= m || dp[i][j + 1] >= dp[i + 1][j])) {
++      result.push({ type: 'add', line: newLines[j] }); j++;
++    } else {
++      result.push({ type: 'del', line: oldLines[i] }); i++;
++    }
++  }
++  return result;
++}
++
++export function applySnapshotToDoc(ydoc: Y.Doc, updateDataB64: string) {
++  const binary = atob(updateDataB64);
++  const blob = new Uint8Array(binary.length);
++  for (let i = 0; i < binary.length; i++) blob[i] = binary.charCodeAt(i);
++  const ytext = ydoc.getText('quill');
++  if (ytext.length > 0) ytext.delete(0, ytext.length);
++  const tmp = new Y.Doc();
++  Y.applyUpdate(tmp, blob);
++  ytext.applyDelta(tmp.getText('quill').toDelta());
++}
++
++/** Returns the text state just BEFORE `target` commit (i.e. prevSnapshot's state, or empty) */
++export function getPreRevertText(prevSnapshot: DocumentSnapshot | null): string {
++  if (!prevSnapshot) return '';
++  return getYDocText(prevSnapshot.updateData);
++}
+diff --git a/D:/Projects/Docu-Sync/src/utils/draft.ts b/D:/Projects/Docu-Sync/src/utils/draft.ts
+new file mode 100644
+index 0000000..714b701
+--- /dev/null
++++ b/D:/Projects/Docu-Sync/src/utils/draft.ts
+@@ -0,0 +1,24 @@
++/**
++ * Local draft persistence — saves the Yjs state update blob to localStorage
++ * so uncommitted changes survive connection drops and page refreshes.
++ */
++
++const draftKey = (roomId: string) => `docu-sync-draft-${roomId}`;
++const draftTsKey = (roomId: string) => `docu-sync-draft-ts-${roomId}`;
++
++export const saveDraft = (roomId: string, base64Blob: string): void => {
++  localStorage.setItem(draftKey(roomId), base64Blob);
++  localStorage.setItem(draftTsKey(roomId), Date.now().toString());
++};
++
++export const loadDraft = (roomId: string): { data: string; savedAt: Date } | null => {
++  const data = localStorage.getItem(draftKey(roomId));
++  const ts = localStorage.getItem(draftTsKey(roomId));
++  if (!data) return null;
++  return { data, savedAt: new Date(ts ? parseInt(ts, 10) : Date.now()) };
++};
++
++export const clearDraft = (roomId: string): void => {
++  localStorage.removeItem(draftKey(roomId));
++  localStorage.removeItem(draftTsKey(roomId));
++};
+diff --git a/E:/Docu-Sync/src/utils/firebase.ts b/D:/Projects/Docu-Sync/src/utils/firebase.ts
+index 498530b..f2fd7ff 100644
+--- a/E:/Docu-Sync/src/utils/firebase.ts
++++ b/D:/Projects/Docu-Sync/src/utils/firebase.ts
+@@ -1,5 +1,5 @@
+ import { initializeApp } from "firebase/app";
+-import { getFirestore, collection, addDoc, getDocs, query, Timestamp, where, doc, setDoc, getDoc, updateDoc, arrayUnion } from "firebase/firestore";
++import { getFirestore, collection, addDoc, getDocs, query, Timestamp, where, doc, setDoc, getDoc, updateDoc, arrayUnion, deleteDoc, writeBatch } from "firebase/firestore";
+ import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from "firebase/auth";
+ 
+ // Vite environment variables
+@@ -21,7 +21,6 @@ export const auth = app ? getAuth(app) : null;
+ // Auth Helpers
+ export const signInWithGoogle = async () => {
+   if (!auth) {
+-    // Graceful fallback for demo
+     alert("Firebase Auth is not configured. Simulating a mock identity for testing.");
+     return { user: { displayName: "Demo User", photoURL: "", uid: "mock-uid-123" } };
+   }
+@@ -44,7 +43,9 @@ export const loginWithEmail = async (email: string, pass: string) => {
+ export const logout = async () => {
+   if (!auth) return;
+   return await signOut(auth);
+-}
++};
++
++// ── Interfaces ───────────────────────────────────────────────────────────────
+ 
+ export interface DocumentSnapshot {
+   id: string;
+@@ -52,7 +53,11 @@ export interface DocumentSnapshot {
+   previewText: string;
+   updateData: string;
+   roomId: string;
+-  name?: string;
++  // Git-style fields
++  commitMessage: string;
++  authorName: string;
++  authorAvatar: string;
++  shortHash: string;
+ }
+ 
+ export interface RoomParticipant {
+@@ -64,39 +69,92 @@ export interface RoomParticipant {
+ 
+ export interface WorkspaceRoom {
+   roomId: string;
++  name: string;           // human-friendly name (falls back to roomId)
+   createdAt: number;
+-  members: string[]; // List of uids who have ever joined
+-  activeParticipants: RoomParticipant[]; // Array representing current online users
+-  type?: 'text' | 'code';
+-  language?: string;
++  members: string[];
++  activeParticipants: RoomParticipant[];
++  lastPreview: string;    // text from most recent commit
++  lastCommit: string;     // most recent commit message
+ }
+ 
++// ── Shared base64 helper (avoids call-stack overflow for large docs) ─────────
++export const uint8ToB64 = (arr: Uint8Array): string => {
++  let binary = '';
++  const chunk = 8192;
++  for (let i = 0; i < arr.length; i += chunk) {
++    binary += String.fromCharCode(...arr.subarray(i, i + chunk));
++  }
++  return btoa(binary);
++};
++
+ const mockDbKey = "docu-sync-snapshots";
++const mockRoomsKey = "docu-sync-rooms";
++
++// ── Room Management ──────────────────────────────────────────────────────────
+ 
+-// Room Config 
+-export const createRoomConfig = async (roomId: string, type: 'text'|'code', language?: string) => {
+-  if (!db) {
+-     const existingMap = JSON.parse(localStorage.getItem('local-room-configs') || "{}");
+-     existingMap[roomId] = { type, language };
+-     localStorage.setItem('local-room-configs', JSON.stringify(existingMap));
+-     return;
++/**
++ * Create (or touch) a room document immediately when the user creates it
++ * from the Dashboard. This persists the friendly name before first entry.
++ */
++export const createRoom = async (roomId: string, name: string, user: any): Promise<void> => {
++  if (db) {
++    const roomRef = doc(db, "rooms", roomId);
++    const snap = await getDoc(roomRef);
++    if (!snap.exists()) {
++      await setDoc(roomRef, {
++        roomId,
++        name: name || roomId,
++        createdAt: Date.now(),
++        members: [user.uid],
++        activeParticipants: [],
++        lastPreview: '',
++        lastCommit: '',
++      });
++    }
++  } else {
++    const rooms = JSON.parse(localStorage.getItem(mockRoomsKey) || "[]");
++    if (!rooms.find((r: any) => r.roomId === roomId)) {
++      rooms.unshift({
++        roomId,
++        name: name || roomId,
++        createdAt: Date.now(),
++        members: [user?.uid || 'guest'],
++        activeParticipants: [],
++        lastPreview: '',
++        lastCommit: '',
++      });
++      localStorage.setItem(mockRoomsKey, JSON.stringify(rooms));
++    }
+   }
+-  const roomRef = doc(db, "rooms", roomId);
+-  const snap = await getDoc(roomRef);
+-  if (!snap.exists()) {
+-    await setDoc(roomRef, {
+-      roomId,
+-      createdAt: Date.now(),
+-      members: [],
+-      activeParticipants: [],
+-      type,
+-      language: language || null
+-    });
++};
++
++/**
++ * Delete a room document AND all its snapshots in one operation.
++ * Prevents orphan snapshot data in Firestore.
++ */
++export const deleteRoomAndSnapshots = async (roomId: string): Promise<void> => {
++  if (db) {
++    // Query all snapshots for this room
++    const snapshotsQ = query(collection(db, "snapshots"), where("roomId", "==", roomId));
++    const snapshotDocs = await getDocs(snapshotsQ);
++
++    // Use a batch for atomic delete (Firestore batch supports up to 500 ops)
++    const batch = writeBatch(db);
++    snapshotDocs.docs.forEach(d => batch.delete(d.ref));
++    batch.delete(doc(db, "rooms", roomId));
++    await batch.commit();
++  } else {
++    // localStorage fallback
++    const snapshots = JSON.parse(localStorage.getItem(mockDbKey) || "[]");
++    localStorage.setItem(mockDbKey, JSON.stringify(snapshots.filter((s: any) => s.roomId !== roomId)));
++    const rooms = JSON.parse(localStorage.getItem(mockRoomsKey) || "[]");
++    localStorage.setItem(mockRoomsKey, JSON.stringify(rooms.filter((r: any) => r.roomId !== roomId)));
+   }
+ };
+ 
+-// Global Room Presence
+-export const trackRoomEntry = async (roomId: string, user: any) => {
++// ── Presence Tracking ────────────────────────────────────────────────────────
++
++export const trackRoomEntry = async (roomId: string, user: any): Promise<void> => {
+   if (!db || !user) return;
+   const roomRef = doc(db, "rooms", roomId);
+   const participantData: RoomParticipant = {
+@@ -108,21 +166,19 @@ export const trackRoomEntry = async (roomId: string, user: any) => {
+ 
+   const roomSnap = await getDoc(roomRef);
+   if (!roomSnap.exists()) {
+-    // Initialize room on very first entry if not created explicitly via dashboard
+     await setDoc(roomRef, {
+       roomId,
++      name: roomId,
+       createdAt: Date.now(),
+       members: [user.uid],
+       activeParticipants: [participantData],
+-      type: 'text'
++      lastPreview: '',
++      lastCommit: '',
+     });
+   } else {
+-    // Add user to history and bind them to active participants
+     const activeRaw = roomSnap.data().activeParticipants || [];
+-    // Filter out previous ghost instances of this exact user before adding fresh one
+     const newActive = activeRaw.filter((p: any) => p.uid !== user.uid);
+     newActive.push(participantData);
+-
+     await updateDoc(roomRef, {
+       members: arrayUnion(user.uid),
+       activeParticipants: newActive
+@@ -130,23 +186,32 @@ export const trackRoomEntry = async (roomId: string, user: any) => {
+   }
+ };
+ 
+-export const trackRoomExit = async (roomId: string, user: any) => {
++export const trackRoomExit = async (roomId: string, user: any): Promise<void> => {
+   if (!db || !user) return;
+   const roomRef = doc(db, "rooms", roomId);
+   const roomSnap = await getDoc(roomRef);
+-  
+   if (roomSnap.exists()) {
+     const activeRaw = roomSnap.data().activeParticipants || [];
+-    // Purge user from online state
+     const newActive = activeRaw.filter((p: any) => p.uid !== user.uid);
+-    await updateDoc(roomRef, {
+-      activeParticipants: newActive
+-    });
++    await updateDoc(roomRef, { activeParticipants: newActive });
+   }
+ };
+ 
+-export const saveSnapshot = async (roomId: string, previewText: string, updateBlob: Uint8Array, name?: string): Promise<void> => {
+-  const base64Update = btoa(String.fromCharCode(...updateBlob));
++// ── Snapshots ────────────────────────────────────────────────────────────────
++
++const generateShortHash = (): string =>
++  Math.floor(Math.random() * 0xfffffff).toString(16).padStart(7, '0');
++
++export const saveSnapshot = async (
++  roomId: string,
++  previewText: string,
++  updateBlob: Uint8Array,
++  commitMessage: string,
++  authorName: string,
++  authorAvatar: string
++): Promise<void> => {
++  const base64Update = uint8ToB64(updateBlob);   // chunked, safe for large docs
++  const shortHash = generateShortHash();
+ 
+   if (db) {
+     await addDoc(collection(db, "snapshots"), {
+@@ -154,69 +219,90 @@ export const saveSnapshot = async (roomId: string, previewText: string, updateBl
+       roomId,
+       previewText,
+       updateData: base64Update,
+-      ...(name && { name })
++      commitMessage,
++      authorName,
++      authorAvatar,
++      shortHash,
+     });
++    // Also update the room's lastPreview / lastCommit so Dashboard can show it
++    try {
++      await updateDoc(doc(db, "rooms", roomId), {
++        lastPreview: previewText,
++        lastCommit: commitMessage,
++      });
++    } catch {
++      // Room doc may not exist yet in edge cases — non-fatal
++    }
+   } else {
+     const existing = JSON.parse(localStorage.getItem(mockDbKey) || "[]");
+-    const newSnapshot = {
++    localStorage.setItem(mockDbKey, JSON.stringify([{
+       id: Math.random().toString(36).substring(7),
+       roomId,
+       createdAt: new Date().toISOString(),
+       previewText,
+       updateData: base64Update,
+-      ...(name && { name })
+-    };
+-    localStorage.setItem(mockDbKey, JSON.stringify([newSnapshot, ...existing]));
++      commitMessage,
++      authorName,
++      authorAvatar,
++      shortHash,
++    }, ...existing]));
++
++    // Update localStorage room
++    const rooms = JSON.parse(localStorage.getItem(mockRoomsKey) || "[]");
++    const idx = rooms.findIndex((r: any) => r.roomId === roomId);
++    if (idx !== -1) {
++      rooms[idx].lastPreview = previewText;
++      rooms[idx].lastCommit = commitMessage;
++      localStorage.setItem(mockRoomsKey, JSON.stringify(rooms));
++    }
+   }
+ };
+ 
+ export const getSnapshots = async (roomId: string): Promise<DocumentSnapshot[]> => {
+-  // We remove orderBy("createdAt", "desc") from the query so we don't need a custom Composite Index
+   if (db) {
+-    const q = query(
+-      collection(db, "snapshots"), 
+-      where("roomId", "==", roomId)
+-    );
++    const q = query(collection(db, "snapshots"), where("roomId", "==", roomId));
+     try {
+-        const querySnapshot = await getDocs(q);
+-        const results = querySnapshot.docs.map(doc => ({
+-            id: doc.id,
+-            roomId: doc.data().roomId,
+-            createdAt: doc.data().createdAt.toDate(),
+-            previewText: doc.data().previewText,
+-            updateData: doc.data().updateData,
+-            name: doc.data().name
+-        }));
+-        
+-        // Natively sort the results descending in Javascript!
+-        return results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
++      const querySnapshot = await getDocs(q);
++      const results = querySnapshot.docs.map(d => ({
++        id: d.id,
++        roomId: d.data().roomId,
++        createdAt: d.data().createdAt.toDate(),
++        previewText: d.data().previewText,
++        updateData: d.data().updateData,
++        commitMessage: d.data().commitMessage || 'Snapshot',
++        authorName: d.data().authorName || 'Unknown',
++        authorAvatar: d.data().authorAvatar || '',
++        shortHash: d.data().shortHash || d.id.substring(0, 7),
++      }));
++      return results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+     } catch (e) {
+-        // If index is missing, return empty or fallback so it doesn't crash the app wildly
+-        console.error("Firestore Error (likely missing index):", e);
+-        return [];
++      console.error("Firestore Error (likely missing index):", e);
++      return [];
+     }
+-    
+   } else {
+-    // Filter local storage gracefully
+     const existing = JSON.parse(localStorage.getItem(mockDbKey) || "[]");
+     return existing
+       .filter((item: any) => item.roomId === roomId)
+       .map((item: any) => ({
+         ...item,
+-        createdAt: new Date(item.createdAt)
++        createdAt: new Date(item.createdAt),
++        commitMessage: item.commitMessage || 'Snapshot',
++        authorName: item.authorName || 'Unknown',
++        authorAvatar: item.authorAvatar || '',
++        shortHash: item.shortHash || item.id.substring(0, 7),
+       }));
+   }
+ };
+ 
+-export const getRoomConfig = async (roomId: string): Promise<{ type: 'text'|'code', language?: string }> => {
++/** Delete a single snapshot by its Firestore document ID. */
++export const deleteSnapshot = async (id: string): Promise<void> => {
+   if (db) {
+-    const snap = await getDoc(doc(db, "rooms", roomId));
+-    if (snap.exists() && snap.data().type) {
+-      return { type: snap.data().type, language: snap.data().language };
+-    }
++    await deleteDoc(doc(db, "snapshots", id));
+   } else {
+-    const map = JSON.parse(localStorage.getItem('local-room-configs') || "{}");
+-    if (map[roomId]) return map[roomId];
++    const existing = JSON.parse(localStorage.getItem(mockDbKey) || "[]");
++    localStorage.setItem(
++      mockDbKey,
++      JSON.stringify(existing.filter((item: any) => item.id !== id))
++    );
+   }
+-  return { type: 'text' }; // Fallback to traditional text
+ };

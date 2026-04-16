@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, addDoc, getDocs, query, Timestamp, where, doc, setDoc, getDoc, updateDoc, arrayUnion } from "firebase/firestore";
+import { getFirestore, collection, addDoc, getDocs, query, Timestamp, where, doc, setDoc, getDoc, updateDoc, arrayUnion, deleteDoc, writeBatch } from "firebase/firestore";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from "firebase/auth";
 
 // Vite environment variables
@@ -21,7 +21,6 @@ export const auth = app ? getAuth(app) : null;
 // Auth Helpers
 export const signInWithGoogle = async () => {
   if (!auth) {
-    // Graceful fallback for demo
     alert("Firebase Auth is not configured. Simulating a mock identity for testing.");
     return { user: { displayName: "Demo User", photoURL: "", uid: "mock-uid-123" } };
   }
@@ -44,7 +43,9 @@ export const loginWithEmail = async (email: string, pass: string) => {
 export const logout = async () => {
   if (!auth) return;
   return await signOut(auth);
-}
+};
+
+// ── Interfaces ───────────────────────────────────────────────────────────────
 
 export interface DocumentSnapshot {
   id: string;
@@ -52,7 +53,11 @@ export interface DocumentSnapshot {
   previewText: string;
   updateData: string;
   roomId: string;
-  name?: string;
+  // Git-style fields
+  commitMessage: string;
+  authorName: string;
+  authorAvatar: string;
+  shortHash: string;
 }
 
 export interface RoomParticipant {
@@ -64,39 +69,111 @@ export interface RoomParticipant {
 
 export interface WorkspaceRoom {
   roomId: string;
+  name: string;           // human-friendly name (falls back to roomId)
   createdAt: number;
-  members: string[]; // List of uids who have ever joined
-  activeParticipants: RoomParticipant[]; // Array representing current online users
+  members: string[];
+  activeParticipants: RoomParticipant[];
+  lastPreview: string;    // text from most recent commit
+  lastCommit: string;     // most recent commit message
   type?: 'text' | 'code';
   language?: string;
 }
 
-const mockDbKey = "docu-sync-snapshots";
-
-// Room Config 
-export const createRoomConfig = async (roomId: string, type: 'text'|'code', language?: string) => {
-  if (!db) {
-     const existingMap = JSON.parse(localStorage.getItem('local-room-configs') || "{}");
-     existingMap[roomId] = { type, language };
-     localStorage.setItem('local-room-configs', JSON.stringify(existingMap));
-     return;
+// ── Shared base64 helper (avoids call-stack overflow for large docs) ─────────
+export const uint8ToB64 = (arr: Uint8Array): string => {
+  let binary = '';
+  const chunk = 8192;
+  for (let i = 0; i < arr.length; i += chunk) {
+    binary += String.fromCharCode(...arr.subarray(i, i + chunk));
   }
-  const roomRef = doc(db, "rooms", roomId);
-  const snap = await getDoc(roomRef);
-  if (!snap.exists()) {
-    await setDoc(roomRef, {
-      roomId,
-      createdAt: Date.now(),
-      members: [],
-      activeParticipants: [],
-      type,
-      language: language || null
-    });
+  return btoa(binary);
+};
+
+const mockDbKey = "docu-sync-snapshots";
+const mockRoomsKey = "docu-sync-rooms";
+
+// ── Room Management ──────────────────────────────────────────────────────────
+
+/**
+ * Create (or touch) a room document immediately when the user creates it
+ * from the Dashboard. This persists the friendly name before first entry.
+ */
+export const createRoom = async (roomId: string, name: string, user: any, type: 'text' | 'code' = 'text', language?: string): Promise<void> => {
+  if (db) {
+    const roomRef = doc(db, "rooms", roomId);
+    const snap = await getDoc(roomRef);
+    if (!snap.exists()) {
+      await setDoc(roomRef, {
+        roomId,
+        name: name || roomId,
+        createdAt: Date.now(),
+        members: [user.uid],
+        activeParticipants: [],
+        lastPreview: '',
+        lastCommit: '',
+        type,
+        language: language || null,
+      });
+    }
+  } else {
+    const rooms = JSON.parse(localStorage.getItem(mockRoomsKey) || "[]");
+    if (!rooms.find((r: any) => r.roomId === roomId)) {
+      rooms.unshift({
+        roomId,
+        name: name || roomId,
+        createdAt: Date.now(),
+        members: [user?.uid || 'guest'],
+        activeParticipants: [],
+        lastPreview: '',
+        lastCommit: '',
+        type,
+        language: language || null,
+      });
+      localStorage.setItem(mockRoomsKey, JSON.stringify(rooms));
+    }
   }
 };
 
-// Global Room Presence
-export const trackRoomEntry = async (roomId: string, user: any) => {
+export const getRoomConfig = async (roomId: string): Promise<{ type?: 'text'|'code', language?: string } | null> => {
+  if (db) {
+    const snap = await getDoc(doc(db, "rooms", roomId));
+    if (snap.exists()) {
+      return { type: snap.data().type || 'text', language: snap.data().language };
+    }
+    return null;
+  }
+  const rooms = JSON.parse(localStorage.getItem(mockRoomsKey) || "[]");
+  const room = rooms.find((r: any) => r.roomId === roomId);
+  return room ? { type: room.type || 'text', language: room.language } : null;
+};
+
+/**
+ * Delete a room document AND all its snapshots in one operation.
+ * Prevents orphan snapshot data in Firestore.
+ */
+export const deleteRoomAndSnapshots = async (roomId: string): Promise<void> => {
+  if (db) {
+    // Query all snapshots for this room
+    const snapshotsQ = query(collection(db, "snapshots"), where("roomId", "==", roomId));
+    const snapshotDocs = await getDocs(snapshotsQ);
+
+    // Use a batch for atomic delete (Firestore batch supports up to 500 ops)
+    const batch = writeBatch(db);
+    snapshotDocs.docs.forEach(d => batch.delete(d.ref));
+    batch.delete(doc(db, "rooms", roomId));
+    await batch.commit();
+  } else {
+    // localStorage fallback
+    const snapshots = JSON.parse(localStorage.getItem(mockDbKey) || "[]");
+    localStorage.setItem(mockDbKey, JSON.stringify(snapshots.filter((s: any) => s.roomId !== roomId)));
+    const rooms = JSON.parse(localStorage.getItem(mockRoomsKey) || "[]");
+    localStorage.setItem(mockRoomsKey, JSON.stringify(rooms.filter((r: any) => r.roomId !== roomId)));
+  }
+};
+
+// ── Presence Tracking ────────────────────────────────────────────────────────
+
+export const trackRoomEntry = async (roomId: string, user: any): Promise<void> => {
   if (!db || !user) return;
   const roomRef = doc(db, "rooms", roomId);
   const participantData: RoomParticipant = {
@@ -108,21 +185,19 @@ export const trackRoomEntry = async (roomId: string, user: any) => {
 
   const roomSnap = await getDoc(roomRef);
   if (!roomSnap.exists()) {
-    // Initialize room on very first entry if not created explicitly via dashboard
     await setDoc(roomRef, {
       roomId,
+      name: roomId,
       createdAt: Date.now(),
       members: [user.uid],
       activeParticipants: [participantData],
-      type: 'text'
+      lastPreview: '',
+      lastCommit: '',
     });
   } else {
-    // Add user to history and bind them to active participants
     const activeRaw = roomSnap.data().activeParticipants || [];
-    // Filter out previous ghost instances of this exact user before adding fresh one
     const newActive = activeRaw.filter((p: any) => p.uid !== user.uid);
     newActive.push(participantData);
-
     await updateDoc(roomRef, {
       members: arrayUnion(user.uid),
       activeParticipants: newActive
@@ -130,23 +205,32 @@ export const trackRoomEntry = async (roomId: string, user: any) => {
   }
 };
 
-export const trackRoomExit = async (roomId: string, user: any) => {
+export const trackRoomExit = async (roomId: string, user: any): Promise<void> => {
   if (!db || !user) return;
   const roomRef = doc(db, "rooms", roomId);
   const roomSnap = await getDoc(roomRef);
-  
   if (roomSnap.exists()) {
     const activeRaw = roomSnap.data().activeParticipants || [];
-    // Purge user from online state
     const newActive = activeRaw.filter((p: any) => p.uid !== user.uid);
-    await updateDoc(roomRef, {
-      activeParticipants: newActive
-    });
+    await updateDoc(roomRef, { activeParticipants: newActive });
   }
 };
 
-export const saveSnapshot = async (roomId: string, previewText: string, updateBlob: Uint8Array, name?: string): Promise<void> => {
-  const base64Update = btoa(String.fromCharCode(...updateBlob));
+// ── Snapshots ────────────────────────────────────────────────────────────────
+
+const generateShortHash = (): string =>
+  Math.floor(Math.random() * 0xfffffff).toString(16).padStart(7, '0');
+
+export const saveSnapshot = async (
+  roomId: string,
+  previewText: string,
+  updateBlob: Uint8Array,
+  commitMessage: string,
+  authorName: string,
+  authorAvatar: string
+): Promise<void> => {
+  const base64Update = uint8ToB64(updateBlob);   // chunked, safe for large docs
+  const shortHash = generateShortHash();
 
   if (db) {
     await addDoc(collection(db, "snapshots"), {
@@ -154,69 +238,90 @@ export const saveSnapshot = async (roomId: string, previewText: string, updateBl
       roomId,
       previewText,
       updateData: base64Update,
-      ...(name && { name })
+      commitMessage,
+      authorName,
+      authorAvatar,
+      shortHash,
     });
+    // Also update the room's lastPreview / lastCommit so Dashboard can show it
+    try {
+      await updateDoc(doc(db, "rooms", roomId), {
+        lastPreview: previewText,
+        lastCommit: commitMessage,
+      });
+    } catch {
+      // Room doc may not exist yet in edge cases — non-fatal
+    }
   } else {
     const existing = JSON.parse(localStorage.getItem(mockDbKey) || "[]");
-    const newSnapshot = {
+    localStorage.setItem(mockDbKey, JSON.stringify([{
       id: Math.random().toString(36).substring(7),
       roomId,
       createdAt: new Date().toISOString(),
       previewText,
       updateData: base64Update,
-      ...(name && { name })
-    };
-    localStorage.setItem(mockDbKey, JSON.stringify([newSnapshot, ...existing]));
+      commitMessage,
+      authorName,
+      authorAvatar,
+      shortHash,
+    }, ...existing]));
+
+    // Update localStorage room
+    const rooms = JSON.parse(localStorage.getItem(mockRoomsKey) || "[]");
+    const idx = rooms.findIndex((r: any) => r.roomId === roomId);
+    if (idx !== -1) {
+      rooms[idx].lastPreview = previewText;
+      rooms[idx].lastCommit = commitMessage;
+      localStorage.setItem(mockRoomsKey, JSON.stringify(rooms));
+    }
   }
 };
 
 export const getSnapshots = async (roomId: string): Promise<DocumentSnapshot[]> => {
-  // We remove orderBy("createdAt", "desc") from the query so we don't need a custom Composite Index
   if (db) {
-    const q = query(
-      collection(db, "snapshots"), 
-      where("roomId", "==", roomId)
-    );
+    const q = query(collection(db, "snapshots"), where("roomId", "==", roomId));
     try {
-        const querySnapshot = await getDocs(q);
-        const results = querySnapshot.docs.map(doc => ({
-            id: doc.id,
-            roomId: doc.data().roomId,
-            createdAt: doc.data().createdAt.toDate(),
-            previewText: doc.data().previewText,
-            updateData: doc.data().updateData,
-            name: doc.data().name
-        }));
-        
-        // Natively sort the results descending in Javascript!
-        return results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      const querySnapshot = await getDocs(q);
+      const results = querySnapshot.docs.map(d => ({
+        id: d.id,
+        roomId: d.data().roomId,
+        createdAt: d.data().createdAt.toDate(),
+        previewText: d.data().previewText,
+        updateData: d.data().updateData,
+        commitMessage: d.data().commitMessage || 'Snapshot',
+        authorName: d.data().authorName || 'Unknown',
+        authorAvatar: d.data().authorAvatar || '',
+        shortHash: d.data().shortHash || d.id.substring(0, 7),
+      }));
+      return results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     } catch (e) {
-        // If index is missing, return empty or fallback so it doesn't crash the app wildly
-        console.error("Firestore Error (likely missing index):", e);
-        return [];
+      console.error("Firestore Error (likely missing index):", e);
+      return [];
     }
-    
   } else {
-    // Filter local storage gracefully
     const existing = JSON.parse(localStorage.getItem(mockDbKey) || "[]");
     return existing
       .filter((item: any) => item.roomId === roomId)
       .map((item: any) => ({
         ...item,
-        createdAt: new Date(item.createdAt)
+        createdAt: new Date(item.createdAt),
+        commitMessage: item.commitMessage || 'Snapshot',
+        authorName: item.authorName || 'Unknown',
+        authorAvatar: item.authorAvatar || '',
+        shortHash: item.shortHash || item.id.substring(0, 7),
       }));
   }
 };
 
-export const getRoomConfig = async (roomId: string): Promise<{ type: 'text'|'code', language?: string }> => {
+/** Delete a single snapshot by its Firestore document ID. */
+export const deleteSnapshot = async (id: string): Promise<void> => {
   if (db) {
-    const snap = await getDoc(doc(db, "rooms", roomId));
-    if (snap.exists() && snap.data().type) {
-      return { type: snap.data().type, language: snap.data().language };
-    }
+    await deleteDoc(doc(db, "snapshots", id));
   } else {
-    const map = JSON.parse(localStorage.getItem('local-room-configs') || "{}");
-    if (map[roomId]) return map[roomId];
+    const existing = JSON.parse(localStorage.getItem(mockDbKey) || "[]");
+    localStorage.setItem(
+      mockDbKey,
+      JSON.stringify(existing.filter((item: any) => item.id !== id))
+    );
   }
-  return { type: 'text' }; // Fallback to traditional text
 };

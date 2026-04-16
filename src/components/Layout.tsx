@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { PenTool, History, Home, LogOut } from 'lucide-react';
+import { PenTool, History, Home, LogOut, BarChart2 } from 'lucide-react';
 import { ActiveUsers } from './ActiveUsers';
+import { ContributionsPanel } from './ContributionsPanel';
 import { useNavigate } from 'react-router-dom';
 import { logout } from '../utils/firebase';
 import type { Awareness } from 'y-protocols/awareness';
 import * as Y from 'yjs';
 
-export const Layout: React.FC<{ children: React.ReactNode, sidebar: React.ReactNode, awareness: Awareness | null, ydoc: Y.Doc | null }> = ({ children, sidebar, awareness, ydoc }) => {
+export const Layout: React.FC<{ children: React.ReactNode, sidebar: React.ReactNode, awareness: Awareness | null, ydoc?: Y.Doc | null }> = ({ children, sidebar, awareness, ydoc }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isContribOpen, setIsContribOpen] = useState(false);
   const navigate = useNavigate();
 
   return (
@@ -33,6 +35,20 @@ export const Layout: React.FC<{ children: React.ReactNode, sidebar: React.ReactN
 
           {/* Member 3 User Presence Hub - Stacked */}
           {awareness && ydoc && <ActiveUsers awareness={awareness} ydoc={ydoc} />}
+
+          <div className="sidebar-divider" />
+
+          {/* Contributions Panel Toggle */}
+          {ydoc && (
+            <button
+              className={`btn-toggle-sidebar ${isContribOpen ? 'active' : ''}`}
+              onClick={() => setIsContribOpen(!isContribOpen)}
+              title="Toggle Work Contributions"
+              style={isContribOpen ? { color: 'var(--primary)', borderColor: 'var(--primary)' } : {}}
+            >
+              <BarChart2 size={20} />
+            </button>
+          )}
         </div>
 
         {/* Global Navigation Actions at the very bottom */}
@@ -66,6 +82,13 @@ export const Layout: React.FC<{ children: React.ReactNode, sidebar: React.ReactN
         <main className="main-content">
           {children}
         </main>
+
+        {/* Contributions Right Panel */}
+        {isContribOpen && ydoc && (
+          <aside className="contributions-aside">
+            <ContributionsPanel ydoc={ydoc} />
+          </aside>
+        )}
       </div>
     </div>
   );

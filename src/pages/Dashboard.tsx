@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signInWithGoogle, registerWithEmail, loginWithEmail, logout, auth, db } from '../utils/firebase';
+import { signInWithGoogle, registerWithEmail, loginWithEmail, logout, auth, db, createRoom, deleteRoomAndSnapshots } from '../utils/firebase';
 import type { WorkspaceRoom } from '../utils/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, query, where, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
-import { createRoomConfig } from '../utils/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
-import { PenTool, LogIn, LogOut, Plus, ArrowRight, Mail, Trash2, FileText, Clock, LayoutGrid, Sun, Moon, Code, Terminal } from 'lucide-react';
+import { PenTool, LogIn, LogOut, Plus, ArrowRight, Mail, Trash2, FileText, Clock, LayoutGrid, Sun, Moon, GitCommit, Code, Terminal } from 'lucide-react';
 import { ThemeContext } from '../App';
 
 export const Dashboard: React.FC = () => {
@@ -29,6 +28,8 @@ export const Dashboard: React.FC = () => {
     const [codeRoomName, setCodeRoomName] = useState('');
     const [codeLanguage, setCodeLanguage] = useState('javascript');
     const [now, setNow] = useState(Date.now());
+    const [activeNav, setActiveNav] = useState<'dashboard' | 'recent'>('dashboard');
+    const [deletingId, setDeletingId] = useState<string | null>(null);
 
     useEffect(() => {
         const timer = setInterval(() => setNow(Date.now()), 10000);
@@ -47,9 +48,12 @@ export const Dashboard: React.FC = () => {
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const rooms: WorkspaceRoom[] = snapshot.docs.map(d => ({
                 roomId: d.data().roomId,
+                name: d.data().name || d.data().roomId,
                 createdAt: d.data().createdAt,
                 members: d.data().members || [],
                 activeParticipants: d.data().activeParticipants || [],
+                lastPreview: d.data().lastPreview || '',
+                lastCommit: d.data().lastCommit || '',
                 type: d.data().type,
                 language: d.data().language
             }));
@@ -61,21 +65,23 @@ export const Dashboard: React.FC = () => {
     const handleCreateText = async (e: React.FormEvent) => {
         e.preventDefault();
         const trimmed = customRoomName.trim();
-        if (!trimmed) return;
-        await createRoomConfig(trimmed, 'text');
-        navigate(`/room/${trimmed}`);
+        const targetId = trimmed || Math.random().toString(36).substring(2, 12);
+        if (user) await createRoom(targetId, trimmed || targetId, user, 'text');
+        setCustomRoomName('');
+        navigate(`/room/${targetId}`);
     };
 
     const handleCreateCode = async (e: React.FormEvent) => {
         e.preventDefault();
         const trimmed = codeRoomName.trim();
-        if (!trimmed) return;
-        await createRoomConfig(trimmed, 'code', codeLanguage);
-        navigate(`/room/${trimmed}`);
+        const targetId = trimmed || Math.random().toString(36).substring(2, 12);
+        if (user) await createRoom(targetId, trimmed || targetId, user, 'code', codeLanguage);
+        setCodeRoomName('');
+        navigate(`/room/${targetId}`);
     };
 
     const handleRoomNameInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setCustomRoomName(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''));
+        setCustomRoomName(e.target.value.replace(/[^a-zA-Z0-9_\- ]/g, ''));
     };
 
     const handleJoin = (e: React.FormEvent) => {
@@ -85,9 +91,13 @@ export const Dashboard: React.FC = () => {
 
     const handleDelete = async (e: React.MouseEvent, roomId: string) => {
         e.stopPropagation();
-        if (!db) return;
-        try { await deleteDoc(doc(db, 'rooms', roomId)); }
-        catch (err) { console.error('Delete failed:', err); }
+        setDeletingId(roomId);
+        try {
+            await deleteRoomAndSnapshots(roomId);
+        } catch (err) {
+            console.error('Delete failed:', err);
+        }
+        setDeletingId(null);
     };
 
     const handleAuth = async (e: React.FormEvent) => {
@@ -110,6 +120,11 @@ export const Dashboard: React.FC = () => {
 
     const activeCount = (room: WorkspaceRoom) =>
         room.activeParticipants?.filter(p => now - p.lastActive < 35000) || [];
+
+    // Displayed rooms depend on active nav tab
+    const displayedRooms = activeNav === 'recent'
+        ? [...myRooms].sort((a, b) => b.createdAt - a.createdAt).slice(0, 10)
+        : myRooms;
 
     // ─── AUTH PAGE ────────────────────────────────────────────────────────────
     if (!user) {
@@ -178,17 +193,26 @@ export const Dashboard: React.FC = () => {
 
                     <div className="ws-nav-list">
                         <div className="ws-rail-label" style={{ marginBottom: '8px' }}>Main Menu</div>
-                        <div className="ws-nav-item active">
+                        <div
+                            className={`ws-nav-item ${activeNav === 'dashboard' ? 'active' : ''}`}
+                            onClick={() => setActiveNav('dashboard')}
+                            role="button"
+                        >
                             <LayoutGrid size={16} /> <span>Dashboard</span>
                         </div>
-                        <div className="ws-nav-item">
+                        <div
+                            className={`ws-nav-item ${activeNav === 'recent' ? 'active' : ''}`}
+                            onClick={() => setActiveNav('recent')}
+                            role="button"
+                        >
                             <FileText size={16} /> <span>Recent Docs</span>
                         </div>
                     </div>
 
-
+                    {/* Start Collaborating section removed from sidebar as it is now in Dashboard tab */}
 
                     <div className="ws-rail-section" style={{ marginTop: '24px' }}>
+                        <div className="ws-rail-label" style={{ marginBottom: '8px' }}>Join by ID</div>
                         <form onSubmit={handleJoin} style={{ display: 'flex', gap: '8px' }}>
                             <input
                                 className="ws-input"
@@ -230,80 +254,91 @@ export const Dashboard: React.FC = () => {
                 {/* Main Content Area */}
                 <main className="ws-main" style={{ display: 'flex', flexDirection: 'column' }}>
                     <div className="ws-main-top">
-                        <span>Workspace</span> <span style={{ padding: '0 4px', color: '#cbd5e1' }}>/</span> <span className="ws-main-top-active">Dashboard</span>
+                        <span>Workspace</span>
+                        <span style={{ padding: '0 4px', color: '#cbd5e1' }}>/</span>
+                        <span className="ws-main-top-active">
+                            {activeNav === 'dashboard' ? 'Dashboard' : 'Recent Docs'}
+                        </span>
                     </div>
 
-                    <div className="ws-main-header" style={{ marginBottom: '24px' }}>
-                        <h1 className="ws-main-title">Start a new project</h1>
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '40px' }}>
-                        {/* Text Editor Creation Card */}
-                        <div style={{ background: 'var(--surface-base)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-                                <div style={{ background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', padding: '8px', borderRadius: '8px' }}>
-                                    <FileText size={20} />
-                                </div>
-                                <h2 style={{ fontSize: '1.1rem', margin: 0, color: 'var(--text-main)', fontWeight: 600 }}>Text Document</h2>
-                            </div>
-                            <form onSubmit={handleCreateText} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                <input
-                                    className="ws-input"
-                                    type="text"
-                                    placeholder="Enter document ID (required)"
-                                    value={customRoomName}
-                                    onChange={handleRoomNameInput}
-                                    required
-                                />
-                                <button type="submit" className="ws-btn-create" style={{ display: 'flex', justifyContent: 'center', opacity: customRoomName.trim() ? 1 : 0.6, cursor: customRoomName.trim() ? 'pointer' : 'not-allowed' }} disabled={!customRoomName.trim()}>
-                                    <Plus size={16} /> Create Document
-                                </button>
-                            </form>
+                    {activeNav === 'dashboard' && (
+                       <>
+                        <div className="ws-main-header" style={{ marginBottom: '24px' }}>
+                            <h1 className="ws-main-title">Start a new project</h1>
                         </div>
 
-                        {/* Code Editor Creation Card */}
-                        <div style={{ background: 'var(--surface-base)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-                                <div style={{ background: 'rgba(168, 85, 247, 0.1)', color: '#a855f7', padding: '8px', borderRadius: '8px' }}>
-                                    <Code size={20} />
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '40px' }}>
+                            {/* Text Editor Creation Card */}
+                            <div style={{ background: 'var(--surface-base)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                                    <div style={{ background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', padding: '8px', borderRadius: '8px' }}>
+                                        <FileText size={20} />
+                                    </div>
+                                    <h2 style={{ fontSize: '1.1rem', margin: 0, color: 'var(--text-main)', fontWeight: 600 }}>Text Document</h2>
                                 </div>
-                                <h2 style={{ fontSize: '1.1rem', margin: 0, color: 'var(--text-main)', fontWeight: 600 }}>Code Project</h2>
-                            </div>
-                            <form onSubmit={handleCreateCode} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                <div style={{ display: 'flex', gap: '8px' }}>
+                                <form onSubmit={handleCreateText} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                     <input
                                         className="ws-input"
-                                        style={{ flex: 1, marginBottom: 0 }}
                                         type="text"
-                                        placeholder="Enter project ID (required)"
-                                        value={codeRoomName}
-                                        onChange={e => setCodeRoomName(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+                                        placeholder="Enter document ID (required)"
+                                        value={customRoomName}
+                                        onChange={handleRoomNameInput}
                                         required
                                     />
-                                    <select 
-                                      className="ws-input" 
-                                      style={{ width: '110px', marginBottom: 0 }}
-                                      value={codeLanguage}
-                                      onChange={e => setCodeLanguage(e.target.value)}
-                                    >
-                                        <option value="javascript">JavaScript</option>
-                                        <option value="python">Python</option>
-                                        <option value="java">Java</option>
-                                        <option value="c++">C++</option>
-                                    </select>
+                                    <button type="submit" className="ws-btn-create" style={{ display: 'flex', justifyContent: 'center', opacity: customRoomName.trim() ? 1 : 0.6, cursor: customRoomName.trim() ? 'pointer' : 'not-allowed' }} disabled={!customRoomName.trim()}>
+                                        <Plus size={16} /> Create Document
+                                    </button>
+                                </form>
+                            </div>
+
+                            {/* Code Editor Creation Card */}
+                            <div style={{ background: 'var(--surface-base)', border: '1px solid var(--border-subtle)', borderRadius: '12px', padding: '20px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                                    <div style={{ background: 'rgba(168, 85, 247, 0.1)', color: '#a855f7', padding: '8px', borderRadius: '8px' }}>
+                                        <Code size={20} />
+                                    </div>
+                                    <h2 style={{ fontSize: '1.1rem', margin: 0, color: 'var(--text-main)', fontWeight: 600 }}>Code Project</h2>
                                 </div>
-                                <button type="submit" className="ws-btn-create" style={{ display: 'flex', justifyContent: 'center', background: '#a855f7', color: '#fff', opacity: codeRoomName.trim() ? 1 : 0.6, cursor: codeRoomName.trim() ? 'pointer' : 'not-allowed' }} disabled={!codeRoomName.trim()}>
-                                    <Terminal size={16} /> Create Code Project
-                                </button>
-                            </form>
+                                <form onSubmit={handleCreateCode} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <input
+                                            className="ws-input"
+                                            style={{ flex: 1, marginBottom: 0 }}
+                                            type="text"
+                                            placeholder="Enter project ID (required)"
+                                            value={codeRoomName}
+                                            onChange={e => setCodeRoomName(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+                                            required
+                                        />
+                                        <select 
+                                          className="ws-input" 
+                                          style={{ width: '110px', marginBottom: 0 }}
+                                          value={codeLanguage}
+                                          onChange={e => setCodeLanguage(e.target.value)}
+                                        >
+                                            <option value="javascript">JavaScript</option>
+                                            <option value="python">Python</option>
+                                            <option value="java">Java</option>
+                                            <option value="c++">C++</option>
+                                        </select>
+                                    </div>
+                                    <button type="submit" className="ws-btn-create" style={{ display: 'flex', justifyContent: 'center', background: '#a855f7', color: '#fff', opacity: codeRoomName.trim() ? 1 : 0.6, cursor: codeRoomName.trim() ? 'pointer' : 'not-allowed' }} disabled={!codeRoomName.trim()}>
+                                        <Terminal size={16} /> Create Code Project
+                                    </button>
+                                </form>
+                            </div>
                         </div>
-                    </div>
+                       </>
+                    )}
 
                     <div className="ws-main-header">
-                        <h1 className="ws-main-title">Recent Workspaces</h1>
+                        <h1 className="ws-main-title">
+                            {activeNav === 'dashboard' ? 'Your documents' : 'Recent documents'}
+                        </h1>
+                        <span className="ws-doc-count">{myRooms.length} doc{myRooms.length !== 1 ? 's' : ''}</span>
                     </div>
 
-                    {myRooms.length === 0 ? (
+                    {displayedRooms.length === 0 ? (
                         <div className="ws-empty" style={{ flex: 1 }}>
                             <FileText size={48} strokeWidth={1} />
                             <p>No documents yet.</p>
@@ -311,13 +346,14 @@ export const Dashboard: React.FC = () => {
                         </div>
                     ) : (
                         <div className="ws-grid">
-                            {myRooms.map(room => {
+                            {displayedRooms.map(room => {
                                 const online = activeCount(room);
+                                const isDeleting = deletingId === room.roomId;
                                 return (
                                     <div
                                         key={room.roomId}
-                                        className="ws-card"
-                                        onClick={() => navigate(`/room/${room.roomId}`)}
+                                        className={`ws-card ${isDeleting ? 'ws-card-deleting' : ''}`}
+                                        onClick={() => !isDeleting && navigate(`/room/${room.roomId}`)}
                                     >
                                         <div className="ws-card-top">
                                             <div className="ws-card-icon" style={{ color: room.type === 'code' ? '#a855f7' : '#cbd5e1' }}>
@@ -326,13 +362,33 @@ export const Dashboard: React.FC = () => {
                                             <button
                                                 className="ws-card-delete"
                                                 onClick={e => handleDelete(e, room.roomId)}
-                                                title="Delete room"
+                                                title="Delete document and all its history"
+                                                disabled={isDeleting}
                                             >
-                                                <Trash2 size={13} />
+                                                {isDeleting
+                                                    ? <span style={{ width: 13, height: 13, border: '2px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.7s linear infinite' }} />
+                                                    : <Trash2 size={13} />
+                                                }
                                             </button>
                                         </div>
 
-                                        <div className="ws-card-name" style={{ marginTop: '4px' }}>{room.roomId}</div>
+                                        {/* Room friendly name */}
+                                        <div className="ws-card-name" style={{ marginTop: '4px' }}>
+                                            {room.name && room.name !== room.roomId ? room.name : room.roomId}
+                                        </div>
+
+                                        {/* Last commit preview */}
+                                        {room.lastPreview && (
+                                            <div className="ws-card-preview">{room.lastPreview}</div>
+                                        )}
+
+                                        {/* Last commit message */}
+                                        {room.lastCommit && (
+                                            <div className="ws-card-last-commit">
+                                                <GitCommit size={11} />
+                                                {room.lastCommit}
+                                            </div>
+                                        )}
 
                                         <div className="ws-card-footer">
                                             <span className="ws-card-date">
@@ -355,6 +411,7 @@ export const Dashboard: React.FC = () => {
                                                             <div className="ws-card-avatar ws-card-avatar-more">+{online.length - 3}</div>
                                                         )}
                                                     </div>
+                                                    <span className="ws-card-online-label">{online.length} online</span>
                                                 </div>
                                             )}
                                         </div>
