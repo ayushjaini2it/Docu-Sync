@@ -8,6 +8,7 @@ interface Props {
   currentText: string;
   onApply: () => void;
   onCancel: () => void;
+  previewOnly?: boolean;
 }
 
 function timeAgo(date: Date): string {
@@ -18,7 +19,7 @@ function timeAgo(date: Date): string {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-export const DiffOverlay: React.FC<Props> = ({ snapshot, currentText, onApply, onCancel }) => {
+export const DiffOverlay: React.FC<Props> = ({ snapshot, currentText, onApply, onCancel, previewOnly = false }) => {
   const targetText = useMemo(() => getYDocText(snapshot.updateData), [snapshot.updateData]);
 
   // Full diff: current → target (what will change if we apply)
@@ -40,7 +41,7 @@ export const DiffOverlay: React.FC<Props> = ({ snapshot, currentText, onApply, o
           <div className="diff-overlay-title-row">
             <GitCommit size={16} className="diff-overlay-icon" />
             <div>
-              <div className="diff-overlay-title">Checkout Preview</div>
+              <div className="diff-overlay-title">{previewOnly ? 'Commit Content' : 'Checkout Preview'}</div>
               <div className="diff-overlay-subtitle">
                 <span className="diff-hash">#{snapshot.shortHash}</span>
                 <span className="diff-author">by {snapshot.authorName}</span>
@@ -95,12 +96,14 @@ export const DiffOverlay: React.FC<Props> = ({ snapshot, currentText, onApply, o
         <div className="diff-overlay-footer">
           <button className="diff-btn-cancel" onClick={onCancel}>
             <X size={14} />
-            Cancel
+            Close
           </button>
-          <button className="diff-btn-apply" onClick={onApply}>
-            <Check size={14} />
-            Apply Changes
-          </button>
+          {!previewOnly && (
+            <button className="diff-btn-apply" onClick={onApply}>
+              <Check size={14} />
+              Apply Changes
+            </button>
+          )}
         </div>
 
       </div>

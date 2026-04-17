@@ -33,9 +33,15 @@ export const Editor: React.FC<Props> = ({ ydoc, awareness }) => {
       modules: {
         cursors: true,
         toolbar: [ 
-          ['bold', 'italic', 'underline'], 
-          [{ 'header': 1 }, { 'header': 2 }], 
-          [{ 'list': 'ordered'}, { 'list': 'bullet' }] 
+          [{ 'font': [] }, { 'size': ['small', false, 'large', 'huge'] }],
+          ['bold', 'italic', 'underline', 'strike'],
+          [{ 'color': [] }, { 'background': [] }],
+          [{ 'script': 'sub'}, { 'script': 'super' }],
+          [{ 'header': 1 }, { 'header': 2 }, 'blockquote', 'code-block'],
+          [{ 'list': 'ordered'}, { 'list': 'bullet' }, { 'indent': '-1'}, { 'indent': '+1' }],
+          [{ 'align': [] }],
+          ['link', 'image', 'video'],
+          ['clean']
         ]
       }
     });

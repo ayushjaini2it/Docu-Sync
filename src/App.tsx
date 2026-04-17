@@ -1,26 +1,28 @@
-import React, { useEffect, useState, createContext } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Dashboard } from './pages/Dashboard';
 import { EditorRoom } from './pages/EditorRoom';
+import { Landing } from './pages/Landing';
 import { auth } from './utils/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { ThemeContext } from './ThemeContext';
 
-export const ThemeContext = createContext<{ theme: 'light' | 'dark', toggleTheme: () => void }>({ theme: 'light', toggleTheme: () => {} });
+const getSavedTheme = (): 'light' | 'dark' => {
+  const savedTheme = localStorage.getItem('docusync-theme');
+  if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    return 'dark';
+  }
+  return 'light';
+};
 
 const App: React.FC = () => {
-  const [loadingObj, setLoading] = useState(true);
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [loadingObj, setLoading] = useState(!auth);
+  const [theme, setTheme] = useState<'light' | 'dark'>(getSavedTheme());
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('docusync-theme');
-    if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      setTheme('dark');
-      document.documentElement.setAttribute('data-theme', 'dark');
-    } else {
-      setTheme('light');
-      document.documentElement.setAttribute('data-theme', 'light');
-    }
-  }, []);
+    const currentTheme = theme;
+    document.documentElement.setAttribute('data-theme', currentTheme);
+  }, [theme]);
 
   const toggleTheme = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
@@ -31,7 +33,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!auth) {
-        setLoading(false);
         return;
     }
     const unsubscribe = onAuthStateChanged(auth, () => {
@@ -48,7 +49,8 @@ const App: React.FC = () => {
     <ThemeContext.Provider value={{ theme, toggleTheme }}>
       <Router>
         <Routes>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/" element={<Landing />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/room/:roomId" element={<EditorRoom />} />
           {/* Fallback route */}
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -9,6 +9,7 @@ import type { User } from 'firebase/auth';
 interface Props {
   ydoc: Y.Doc;
   roomId: string;
+  documentId: string;
   user: User | null;
   onCheckoutPreview: (snapshot: DocumentSnapshot) => void;
 }
@@ -187,7 +188,7 @@ const CommitEntry: React.FC<CommitEntryProps> = ({
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export const VersionHistory: React.FC<Props> = ({ ydoc, roomId, user, onCheckoutPreview }) => {
+export const VersionHistory: React.FC<Props> = ({ ydoc, roomId, documentId, user, onCheckoutPreview }) => {
   const [snapshots, setSnapshots] = useState<DocumentSnapshot[]>([]);
   const [loading, setLoading] = useState(false);
   const [committing, setCommitting] = useState(false);
@@ -221,7 +222,7 @@ export const VersionHistory: React.FC<Props> = ({ ydoc, roomId, user, onCheckout
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
       debounceTimer.current = setTimeout(() => {
         const blob = Y.encodeStateAsUpdate(ydoc);
-        saveDraft(roomId, uint8ToB64(blob));
+        saveDraft(roomId, documentId, uint8ToB64(blob));
       }, 1500);
     };
     ydoc.on('update', handler);
@@ -229,12 +230,12 @@ export const VersionHistory: React.FC<Props> = ({ ydoc, roomId, user, onCheckout
       ydoc.off('update', handler);
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
     };
-  }, [ydoc, roomId]);
+  }, [ydoc, roomId, documentId]);
 
   const fetchSnapshots = async () => {
     setLoading(true);
     try {
-      const data = await getSnapshots(roomId);
+      const data = await getSnapshots(roomId, documentId, user?.uid);
       setSnapshots(data);
 
       // On first load: restore HEAD, then check for a newer unsaved draft
@@ -247,14 +248,14 @@ export const VersionHistory: React.FC<Props> = ({ ydoc, roomId, user, onCheckout
         }
 
         // 2. Check if a local draft exists
-        const draft = loadDraft(roomId);
+        const draft = loadDraft(roomId, documentId);
         if (draft) {
           const headText = data.length > 0 ? getYDocText(data[0].updateData) : '';
           const draftText = getYDocText(draft.data);
           if (draftText.trim() !== headText.trim()) {
             setDraftInfo({ savedAt: draft.savedAt });
           } else {
-            clearDraft(roomId);
+            clearDraft(roomId, documentId);
           }
         }
 
@@ -269,16 +270,24 @@ export const VersionHistory: React.FC<Props> = ({ ydoc, roomId, user, onCheckout
     setLoading(false);
   };
 
-  useEffect(() => { fetchSnapshots(); }, []);
+  useEffect(() => {
+    isFirstLoad.current = true;
+    fetchSnapshots();
+  }, [roomId]);
 
   const doCommit = async (msg: string): Promise<void> => {
     const updateBlob = Y.encodeStateAsUpdate(ydoc);
     const ytext = ydoc.getText('quill');
     const preview = (ytext.toString().trim() || 'Empty Document').substring(0, 40);
     await saveSnapshot(
-      roomId, preview, updateBlob, msg,
+      roomId,
+      documentId,
+      preview,
+      updateBlob,
+      msg,
       user?.displayName || 'Anonymous',
-      user?.photoURL || ''
+      user?.photoURL || '',
+      user?.uid || 'anonymous'
     );
   };
 
@@ -290,7 +299,7 @@ export const VersionHistory: React.FC<Props> = ({ ydoc, roomId, user, onCheckout
     try {
       await doCommit(msg);
       setMessage('');
-      clearDraft(roomId);  // committed — draft no longer needed
+      clearDraft(roomId, documentId);  // committed — draft no longer needed
       setDraftInfo(null);
       await fetchSnapshots();
     } catch (err) {
@@ -329,7 +338,7 @@ export const VersionHistory: React.FC<Props> = ({ ydoc, roomId, user, onCheckout
 
       // Auto-commit the revert
       await doCommit(`Revert: "${snapshot.commitMessage}"`);
-      clearDraft(roomId);
+      clearDraft(roomId, documentId);
       setDraftInfo(null);
       await fetchSnapshots();
     } catch (err) {
@@ -339,7 +348,7 @@ export const VersionHistory: React.FC<Props> = ({ ydoc, roomId, user, onCheckout
   };
 
   const handleRestoreDraft = () => {
-    const draft = loadDraft(roomId);
+    const draft = loadDraft(roomId, documentId);
     if (!draft) return;
     applySnapshotToDoc(ydoc, draft.data);
     setDraftInfo(null);
@@ -347,7 +356,7 @@ export const VersionHistory: React.FC<Props> = ({ ydoc, roomId, user, onCheckout
   };
 
   const handleDiscardDraft = () => {
-    clearDraft(roomId);
+    clearDraft(roomId, documentId);
     setDraftInfo(null);
   };
 
@@ -367,7 +376,7 @@ export const VersionHistory: React.FC<Props> = ({ ydoc, roomId, user, onCheckout
       // NOTE: We intentionally do NOT apply the snapshot to the live Yjs doc.
       // The live doc is the shared working tree — resetting history should not
       // overwrite peers' unsaved work. Use Checkout to explicitly apply.
-      clearDraft(roomId);
+      clearDraft(roomId, documentId);
       setDraftInfo(null);
       setResetToast(`HEAD moved to #${snapshot.shortHash}. Use Checkout on the new HEAD to apply it to the editor.`);
       setTimeout(() => setResetToast(null), 6000);
