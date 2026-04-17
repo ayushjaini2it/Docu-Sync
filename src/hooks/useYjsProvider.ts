@@ -18,7 +18,7 @@ export function useYjsProvider(
 
   useEffect(() => {
     const doc      = new Y.Doc();
-    const provider = new WebsocketProvider('wss://websocket-docu-sync.up.railway.app', roomName, doc);
+    const provider = new WebsocketProvider('wss://demos.yjs.dev/ws', roomName, doc);
 
     console.log(`[YJS] 🛰️ Connecting to Railway WS server for room: ${roomName}`);
 

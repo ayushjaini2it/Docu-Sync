@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, addDoc, getDocs, query, Timestamp, where, doc, setDoc, getDoc, updateDoc, arrayUnion, deleteDoc, writeBatch, onSnapshot } from "firebase/firestore";
+import { getFirestore, collection, addDoc, getDocs, query, Timestamp, where, doc, setDoc, getDoc, updateDoc, arrayUnion, deleteDoc, writeBatch } from "firebase/firestore";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from "firebase/auth";
 
 // Vite environment variables
@@ -25,7 +25,7 @@ export const signInWithGoogle = async () => {
     return { user: { displayName: "Demo User", photoURL: "", uid: "mock-uid-123" } };
   }
   const provider = new GoogleAuthProvider();
-  return await signInWithPopup(auth, provider);
+  return await signInWithRedirect(auth, provider);
 };
 
 export const registerWithEmail = async (email: string, pass: string, name: string) => {
@@ -164,7 +164,7 @@ export const createRoom = async (roomId: string, name: string, user: any, type: 
   }
 };
 
-export const getRoomConfig = async (roomId: string): Promise<{ type?: 'text'|'code', language?: string } | null> => {
+export const getRoomConfig = async (roomId: string): Promise<{ type?: 'text' | 'code', language?: string } | null> => {
   if (db) {
     const snap = await getDoc(doc(db, "rooms", roomId));
     if (snap.exists()) {
@@ -219,7 +219,7 @@ export const addDocumentToRoom = async (roomId: string, docId: string, title: st
     const roomSnap = await getDoc(roomRef);
     if (!roomSnap.exists()) return;
     const data = roomSnap.data();
-    
+
     const hasExistingArray = Array.isArray(data.documents) && data.documents.length > 0;
     if (hasExistingArray) {
       if (!data.documents.some((docItem: any) => docItem.docId === docId)) {
@@ -243,12 +243,12 @@ export const addDocumentToRoom = async (roomId: string, docId: string, title: st
     const idx = rooms.findIndex((r: any) => r.roomId === roomId);
     if (idx === -1) return;
     const room = rooms[idx];
-    
+
     const hasExistingArray = Array.isArray(room.documents) && room.documents.length > 0;
     if (!hasExistingArray) {
-        room.documents = [{ docId: room.roomId, title: room.name || room.roomId, createdAt: room.createdAt, updatedAt: room.createdAt }];
+      room.documents = [{ docId: room.roomId, title: room.name || room.roomId, createdAt: room.createdAt, updatedAt: room.createdAt }];
     }
-    
+
     if (!room.documents.some((docItem: any) => docItem.docId === docId)) {
       room.documents.push({ docId, title, createdAt: Date.now(), updatedAt: Date.now() });
       localStorage.setItem(mockRoomsKey, JSON.stringify(rooms));
